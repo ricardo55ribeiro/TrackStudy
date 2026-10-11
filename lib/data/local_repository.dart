@@ -1,0 +1,633 @@
+import 'dart:convert';
+import 'package:sqlite3/sqlite3.dart';
+import 'package:uuid/uuid.dart';
+import '../domain/models.dart';
+import '../domain/repository.dart';
+import '../domain/week.dart';
+import '../domain/planning.dart';
+import 'database.dart';
+
+class LocalStudyRepository implements StudyRepository {
+  final StudyDatabase database;
+  @override
+  final String location;
+  final DateTime Function() clock;
+  final _uuid = const Uuid();
+  Database get db => database.handle;
+  String get now => clock().toUtc().toIso8601String();
+  LocalStudyRepository(
+    this.database, {
+    this.location = 'In memory',
+    DateTime Function()? clock,
+    bool seed = true,
+  }) : clock = clock ?? DateTime.now {
+    if (seed && preference('initialized', '') != 'yes') {
+      _seed();
+    }
+  }
+  void _insert(String table, Map<String, Object?> row) {
+    db.execute(
+      'INSERT INTO $table (${row.keys.join(',')}) VALUES (${List.filled(row.length, '?').join(',')})',
+      row.values.toList(),
+    );
+  }
+
+  void _seed() => database.transaction(() {
+    const defaults = [
+      ('Research', 6, 8),
+      ('CSPH', 6, 8),
+      ('NLP', 3, 5),
+      ('IAES', 1, 2),
+      ('Gym', 3, 5),
+      ('Sleep', 5, 7),
+      ('Wake-up', 5, 7),
+    ];
+    for (var i = 0; i < defaults.length; i++) {
+      final d = defaults[i];
+      _insert('categories', {
+        'id': _uuid.v4(),
+        ...GoalConfig(
+          name: d.$1,
+          measurement: i < 4 ? Measurement.continuous : Measurement.discrete,
+          unit: i < 4 ? 'h' : '',
+          floor: d.$2 * 100,
+          target: d.$3 * 100,
+          increment: 100,
+          step: i < 4 ? 25 : 100,
+        ).toMap(),
+        'position': i,
+        'active': 1,
+        'created_at': now,
+        'updated_at': now,
+        'archived_at': null,
+      });
+    }
+    setPreference('initialized', 'yes');
+    db.execute("INSERT OR REPLACE INTO sync_meta VALUES ('pristine_seed','1')");
+  });
+  @override
+  List<Category> categories() => db
+      .select('SELECT * FROM categories ORDER BY position,id')
+      .map(
+        (r) => Category(
+          r['id'] as String,
+          GoalConfig.fromMap(r),
+          r['position'] as int,
+          r['active'] == 1,
+          r['archived_at'] != null,
+        ),
+      )
+      .toList();
+  void _ensureWeek(Week week) {
+    for (final c in categories().where((c) => c.active && !c.archived)) {
+      if (db.select(
+        'SELECT id FROM weekly_goals WHERE category_id=? AND week_start=?',
+        [c.id, week.key],
+      ).isEmpty) {
+        _insert('weekly_goals', {
+          'id': _uuid.v4(),
+          'category_id': c.id,
+          'week_start': week.key,
+          ...c.config.toMap(),
+          'position': c.position,
+          'created_at': now,
+          'updated_at': now,
+        });
+      }
+    }
+  }
+
+  @override
+  List<WeeklyProgress> loadWeek(Week week, {required Week current}) {
+    if (week == current) {
+      database.transaction(() => _ensureWeek(week));
+    }
+    return db
+        .select(
+          '''SELECT g.*, COALESCE(SUM(CASE WHEN e.undone_at IS NULL THEN e.amount ELSE 0 END),0) total,
+      COUNT(CASE WHEN e.undone_at IS NULL THEN e.id END) active_entries FROM weekly_goals g
+      JOIN categories c ON c.id=g.category_id LEFT JOIN entries e ON e.goal_id=g.id
+      WHERE g.week_start=? ${week == current ? 'AND c.active=1 AND c.archived_at IS NULL' : ''}
+      GROUP BY g.id ORDER BY ${week == current ? 'c.position' : 'g.position'},g.id''',
+          [week.key],
+        )
+        .map(
+          (r) => WeeklyProgress(
+            goalId: r['id'] as String,
+            categoryId: r['category_id'] as String,
+            week: week.key,
+            config: GoalConfig.fromMap(r),
+            total: r['total'] as int,
+            activeEntries: r['active_entries'] as int,
+          ),
+        )
+        .toList();
+  }
+
+  @override
+  void saveCategory(String? id, GoalConfig config, Week current) {
+    config.validate();
+    database.transaction(() {
+      if (id == null) {
+        _insert('categories', {
+          'id': _uuid.v4(),
+          ...config.toMap(),
+          'position': categories().length,
+          'active': 1,
+          'created_at': now,
+          'updated_at': now,
+          'archived_at': null,
+        });
+      } else {
+        final old = categories().firstWhere((c) => c.id == id);
+        final used = db.select(
+          'SELECT e.id FROM entries e JOIN weekly_goals g ON g.id=e.goal_id WHERE g.category_id=? AND g.week_start=? LIMIT 1',
+          [id, current.key],
+        ).isNotEmpty;
+        if (used &&
+            (old.config.measurement != config.measurement ||
+                old.config.unit != config.unit)) {
+          throw const FormatException(
+            'This week already has entries. Change the unit/type next week, or add a new category.',
+          );
+        }
+        final values = config.toMap();
+        final assignments = values.keys.map((k) => '$k=?').join(',');
+        db.execute(
+          'UPDATE categories SET $assignments,updated_at=? WHERE id=?',
+          [...values.values, now, id],
+        );
+        db.execute(
+          'UPDATE weekly_goals SET $assignments,updated_at=? WHERE category_id=? AND week_start=?',
+          [...values.values, now, id, current.key],
+        );
+      }
+      _ensureWeek(current);
+    });
+  }
+
+  @override
+  void setCategoryStatus(
+    String id, {
+    required bool active,
+    required bool archived,
+  }) => db.execute(
+    'UPDATE categories SET active=?,archived_at=?,updated_at=? WHERE id=?',
+    [active ? 1 : 0, archived ? now : null, now, id],
+  );
+  @override
+  void reorder(List<String> ids) {
+    final actual = categories().map((c) => c.id).toSet();
+    if (ids.length != actual.length ||
+        ids.toSet().length != ids.length ||
+        !actual.containsAll(ids)) {
+      throw const FormatException('Invalid category order');
+    }
+    database.transaction(() {
+      for (var i = 0; i < ids.length; i++) {
+        db.execute('UPDATE categories SET position=?,updated_at=? WHERE id=?', [
+          i,
+          now,
+          ids[i],
+        ]);
+      }
+    });
+  }
+
+  GoalConfig _editableGoal(String id, Week current) {
+    final rows = db.select(
+      'SELECT g.* FROM weekly_goals g JOIN categories c ON c.id=g.category_id WHERE g.id=? AND g.week_start=? AND c.active=1 AND c.archived_at IS NULL',
+      [id, current.key],
+    );
+    if (rows.isEmpty) {
+      throw const FormatException(
+        'Only active categories in the current week can be changed.',
+      );
+    }
+    return GoalConfig.fromMap(rows.first);
+  }
+
+  @override
+  void commit(String goalId, int amount, Week current) =>
+      database.transaction(() {
+        final config = _editableGoal(goalId, current);
+        if (amount <= 0 ||
+            amount > Amount.max ||
+            (config.measurement == Measurement.discrete && amount % 100 != 0)) {
+          throw const FormatException('Invalid addition');
+        }
+        _insert('entries', {
+          'id': _uuid.v4(),
+          'goal_id': goalId,
+          'amount': amount,
+          'created_at': now,
+          'updated_at': now,
+          'undone_at': null,
+          'source': 'manual',
+        });
+      });
+  @override
+  void undo(String goalId, Week current) => database.transaction(() {
+    _editableGoal(goalId, current);
+    // rowid breaks timestamp ties in local insertion order; UUID remains identity.
+    final rows = db.select(
+      'SELECT id FROM entries WHERE goal_id=? AND undone_at IS NULL ORDER BY created_at DESC,rowid DESC LIMIT 1',
+      [goalId],
+    );
+    if (rows.isNotEmpty) {
+      db.execute(
+        'UPDATE entries SET undone_at=?,updated_at=? WHERE id=? AND undone_at IS NULL',
+        [now, now, rows.first['id']],
+      );
+    }
+  });
+  @override
+  List<LedgerEntry> entries(String goalId) => db
+      .select(
+        'SELECT * FROM entries WHERE goal_id=? ORDER BY created_at DESC,rowid DESC',
+        [goalId],
+      )
+      .map(
+        (r) => LedgerEntry(
+          r['id'] as String,
+          r['goal_id'] as String,
+          r['amount'] as int,
+          r['created_at'] as String,
+          r['undone_at'] as String?,
+        ),
+      )
+      .toList();
+  @override
+  void setUndone(String entryId, bool undone, Week current) =>
+      database.transaction(() {
+        final r = db.select('SELECT * FROM entries WHERE id=?', [
+          entryId,
+        ]).first;
+        _editableGoal(r['goal_id'] as String, current);
+        db.execute('UPDATE entries SET undone_at=?,updated_at=? WHERE id=?', [
+          undone ? now : null,
+          now,
+          entryId,
+        ]);
+      });
+  @override
+  List<JournalEntry> journal(String search) => db
+      .select(
+        'SELECT * FROM journal WHERE deleted_at IS NULL ORDER BY created_at DESC,rowid DESC',
+      )
+      .map(
+        (r) => JournalEntry(
+          id: r['id'] as String,
+          createdAt: r['created_at'] as String,
+          learned: r['learned'] as String,
+          question: r['question'] as String,
+          next: r['next'] as String,
+          answer: r['answer'] as String?,
+          answeredAt: r['answered_at'] as String?,
+          experiment: (jsonDecode(r['experiment'] as String) as Map)
+              .cast<String, String>(),
+        ),
+      )
+      .where(
+        (j) =>
+            '${j.learned} ${j.question} ${j.answer ?? ''} ${j.next} ${j.experiment.values.join(' ')}'
+                .toLowerCase()
+                .contains(search.toLowerCase()),
+      )
+      .toList();
+  @override
+  void saveJournal(JournalEntry entry) {
+    if ([
+      entry.learned,
+      entry.question,
+      entry.next,
+    ].every((s) => s.trim().isEmpty)) {
+      throw const FormatException('Write at least one thought before saving.');
+    }
+    db.execute(
+      '''INSERT INTO journal(id,learned,question,next,experiment,created_at,updated_at,answer,answered_at)
+      VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET learned=excluded.learned,question=excluded.question,
+      next=excluded.next,experiment=excluded.experiment,updated_at=excluded.updated_at,
+      answer=excluded.answer,answered_at=excluded.answered_at''',
+      [
+        entry.id,
+        entry.learned,
+        entry.question,
+        entry.next,
+        jsonEncode(entry.experiment),
+        entry.createdAt,
+        now,
+        entry.question.trim().isEmpty || (entry.answer?.trim().isEmpty ?? true)
+            ? null
+            : entry.answer!.trim(),
+        entry.question.trim().isEmpty || (entry.answer?.trim().isEmpty ?? true)
+            ? null
+            : entry.answeredAt ?? now,
+      ],
+    );
+  }
+
+  @override
+  void answerJournal(String id, String? answer, {required String question}) {
+    database.transaction(() {
+      final rows = db.select(
+        'SELECT question FROM journal WHERE id=? AND deleted_at IS NULL',
+        [id],
+      );
+      if (rows.isEmpty ||
+          rows.single['question'] != question ||
+          question.trim().isEmpty) {
+        throw const FormatException(
+          'This question has changed or is no longer available. Reopen the answer editor.',
+        );
+      }
+      final value = answer?.trim();
+      final saved = value == null || value.isEmpty ? null : value;
+      db.execute(
+        'UPDATE journal SET answer=?,answered_at=?,updated_at=? WHERE id=?',
+        [saved, saved == null ? null : now, now, id],
+      );
+    });
+  }
+
+  @override
+  WeeklyReview review(Week week) {
+    final rows = db.select(
+      'SELECT content FROM reviews WHERE week_start=? AND deleted_at IS NULL',
+      [week.key],
+    );
+    return rows.isEmpty
+        ? WeeklyReview(week: week.key)
+        : WeeklyReview.fromMap(
+            week.key,
+            jsonDecode(rows.first['content'] as String) as Map<String, dynamic>,
+          );
+  }
+
+  @override
+  void saveReview(WeeklyReview review) {
+    Week.parse(review.week);
+    if (review.wins.length != 3 || review.done.length != 3) {
+      throw const FormatException('Exactly three wins are required.');
+    }
+    db.execute(
+      '''INSERT INTO reviews(id,week_start,content,created_at,updated_at) VALUES(?,?,?,?,?)
+      ON CONFLICT(week_start) DO UPDATE SET content=excluded.content,updated_at=excluded.updated_at,deleted_at=NULL''',
+      [_uuid.v4(), review.week, jsonEncode(review.toMap()), now, now],
+    );
+  }
+
+  @override
+  String preference(String key, String fallback) {
+    final rows = db.select('SELECT value FROM preferences WHERE key=?', [key]);
+    return rows.isEmpty ? fallback : rows.first['value'] as String;
+  }
+
+  @override
+  List<ScheduleBlock> schedule(int weekday) => db
+      .select(
+        'SELECT * FROM schedule_blocks WHERE weekday=? AND deleted_at IS NULL ORDER BY start_minute,end_minute,id',
+        [weekday],
+      )
+      .map(ScheduleBlock.fromMap)
+      .toList();
+  @override
+  void saveSchedule(ScheduleBlock block) {
+    block.validate();
+    _savePlanning('schedule_blocks', block.toMap());
+  }
+
+  @override
+  void deleteSchedule(String id) => _deletePlanning('schedule_blocks', id);
+  @override
+  List<AcademicEvent> academicEvents(DateTime month) => db
+      .select(
+        'SELECT * FROM academic_events WHERE event_date>=? AND event_date<=? AND deleted_at IS NULL ORDER BY event_date,title,id',
+        [
+          LocalDate.key(DateTime(month.year, month.month)),
+          LocalDate.key(DateTime(month.year, month.month + 1, 0)),
+        ],
+      )
+      .map(AcademicEvent.fromMap)
+      .toList();
+  @override
+  void saveAcademicEvent(AcademicEvent event) {
+    event.validate();
+    _savePlanning('academic_events', event.toMap());
+  }
+
+  @override
+  void deleteAcademicEvent(String id) => _deletePlanning('academic_events', id);
+  void _savePlanning(String table, Map<String, Object?> row) {
+    if (!Uuid.isValidUUID(fromString: row['id'] as String)) {
+      throw const FormatException('Invalid record identifier');
+    }
+    final data = {
+      ...row,
+      'created_at': now,
+      'updated_at': now,
+      'deleted_at': null,
+    };
+    db.execute(
+      'INSERT INTO $table (${data.keys.join(',')}) VALUES (${List.filled(data.length, '?').join(',')}) ON CONFLICT(id) DO UPDATE SET ${data.keys.where((k) => k != 'id' && k != 'created_at').map((k) => '$k=excluded.$k').join(',')}',
+      data.values.toList(),
+    );
+  }
+
+  void _deletePlanning(String table, String id) => db.execute(
+    'UPDATE $table SET deleted_at=?,updated_at=? WHERE id=? AND deleted_at IS NULL',
+    [now, now, id],
+  );
+
+  @override
+  void setPreference(String key, String value) => db.execute(
+    'INSERT INTO preferences(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+    [key, value],
+  );
+  static const tables = [
+    'categories',
+    'weekly_goals',
+    'entries',
+    'journal',
+    'reviews',
+    'schedule_blocks',
+    'academic_events',
+    'preferences',
+  ];
+  @override
+  String exportJson() => const JsonEncoder.withIndent('  ').convert({
+    'format': 'trackstudy',
+    'version': 4,
+    'exported_at': now,
+    'tables': {
+      for (final table in tables)
+        table: db
+            .select(
+              'SELECT * FROM $table${table == 'preferences' ? " WHERE key NOT LIKE 'windows.%'" : ''}',
+            )
+            .map((r) => Map<String, Object?>.from(r))
+            .toList(),
+    },
+  });
+  @override
+  void restoreJson(String data) {
+    // Validate a complete restore in a throwaway database before touching live data.
+    final candidate = LocalStudyRepository(
+      StudyDatabase(sqlite3.openInMemory()),
+      seed: false,
+    );
+    try {
+      final decoded = jsonDecode(data) as Map<String, dynamic>;
+      if (decoded['format'] != 'trackstudy' ||
+          ![2, 3, 4].contains(decoded['version'])) {
+        throw const FormatException('Unsupported backup format/version');
+      }
+      final rows = decoded['tables'] as Map<String, dynamic>;
+      final legacy = decoded['version'] == 2;
+      candidate.database.transaction(() {
+        for (final table in tables) {
+          if (legacy &&
+              ['schedule_blocks', 'academic_events'].contains(table)) {
+            continue;
+          }
+          final columns = candidate.db
+              .select('PRAGMA table_info($table)')
+              .map((r) => r['name'] as String)
+              .toSet();
+          for (final raw in rows[table] as List) {
+            final row = (raw as Map).cast<String, Object?>();
+            if ((decoded['version'] as int) < 4) {
+              if (table == 'journal') {
+                row.putIfAbsent('answer', () => null);
+                row.putIfAbsent('answered_at', () => null);
+              }
+              if (table == 'schedule_blocks') {
+                row.putIfAbsent('description', () => null);
+              }
+            }
+            if (row.length != columns.length ||
+                !columns.containsAll(row.keys)) {
+              throw const FormatException('Invalid backup columns');
+            }
+            for (final key in ['id', 'category_id', 'goal_id']) {
+              if (row.containsKey(key) &&
+                  !Uuid.isValidUUID(fromString: row[key] as String)) {
+                throw const FormatException('Invalid record identifier');
+              }
+            }
+            for (final key in [
+              'created_at',
+              'updated_at',
+              'undone_at',
+              'archived_at',
+              'deleted_at',
+              'answered_at',
+            ]) {
+              if (row[key] != null &&
+                  DateTime.tryParse(row[key] as String) == null) {
+                throw const FormatException('Invalid timestamp');
+              }
+            }
+            if (table == 'categories' || table == 'weekly_goals') {
+              GoalConfig.fromMap(row).validate();
+              if (row['position'] is! int || (row['position'] as int) < 0) {
+                throw const FormatException('Invalid category position');
+              }
+            }
+            if (row.containsKey('week_start')) {
+              Week.parse(row['week_start'] as String);
+            }
+            if (table == 'reviews') {
+              final review = WeeklyReview.fromMap(
+                row['week_start'] as String,
+                jsonDecode(row['content'] as String) as Map<String, dynamic>,
+              );
+              if (review.wins.length != 3 || review.done.length != 3) {
+                throw const FormatException('Invalid review wins');
+              }
+            }
+            if (table == 'journal') {
+              if (row['answer'] != null &&
+                  (row['answer'] is! String ||
+                      (row['question'] as String).trim().isEmpty)) {
+                throw const FormatException('An answer needs a question.');
+              }
+              Map<String, String>.from(
+                jsonDecode(row['experiment'] as String) as Map,
+              );
+            }
+            if (table == 'schedule_blocks') {
+              ScheduleBlock.fromMap(row).validate();
+            }
+            if (table == 'academic_events') {
+              AcademicEvent.fromMap(row).validate();
+            }
+            if (table == 'preferences' &&
+                (row['key'] as String).startsWith('windows.')) {
+              continue;
+            }
+            candidate._insert(table, row);
+          }
+        }
+      });
+      candidate.journal('');
+      if (candidate.db
+          .select(
+            "SELECT e.id FROM entries e JOIN weekly_goals g ON g.id=e.goal_id WHERE g.measurement='discrete' AND e.amount%100!=0",
+          )
+          .isNotEmpty) {
+        throw const FormatException('Invalid discrete entry');
+      }
+      if (candidate.preference('initialized', '') != 'yes') {
+        throw const FormatException('Incomplete backup');
+      }
+      database.transaction(() {
+        final windowsPreferences = db
+            .select("SELECT * FROM preferences WHERE key LIKE 'windows.%'")
+            .map((r) => Map<String, Object?>.from(r))
+            .toList();
+        for (final table in tables.reversed) {
+          if (['schedule_blocks', 'academic_events'].contains(table)) continue;
+          db.execute('DELETE FROM $table');
+        }
+        for (final table in tables) {
+          if (['schedule_blocks', 'academic_events'].contains(table)) {
+            if (legacy) {
+              continue; // Old backups cannot erase data they never contained.
+            }
+            final restored = candidate.db.select('SELECT * FROM $table');
+            final ids = restored.map((r) => r['id']).toSet();
+            for (final row in db.select(
+              'SELECT id FROM $table WHERE deleted_at IS NULL',
+            )) {
+              if (!ids.contains(row['id'])) {
+                _deletePlanning(table, row['id'] as String);
+              }
+            }
+            for (final row in restored) {
+              final data = Map<String, Object?>.from(row)..['updated_at'] = now;
+              db.execute(
+                'INSERT INTO $table (${data.keys.join(',')}) VALUES (${List.filled(data.length, '?').join(',')}) ON CONFLICT(id) DO UPDATE SET ${data.keys.where((k) => k != 'id' && k != 'created_at').map((k) => '$k=excluded.$k').join(',')}',
+                data.values.toList(),
+              );
+            }
+            continue;
+          }
+          for (final row in candidate.db.select('SELECT * FROM $table')) {
+            _insert(table, row);
+          }
+        }
+        for (final row in windowsPreferences) {
+          _insert('preferences', row);
+        }
+      });
+    } catch (e) {
+      throw FormatException('Restore rejected; existing data is unchanged. $e');
+    } finally {
+      candidate.close();
+    }
+  }
+
+  @override
+  void close() => database.close();
+}

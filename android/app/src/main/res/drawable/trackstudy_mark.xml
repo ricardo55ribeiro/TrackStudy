@@ -1,0 +1,9 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="256" android:viewportHeight="256">
+    <!-- Same shapes and palette as assets/app_icon.svg, within the adaptive safe zone. -->
+    <group android:scaleX="0.66" android:scaleY="0.66" android:pivotX="128" android:pivotY="128">
+        <path android:fillColor="#2a3545" android:pathData="M57,64H199Q207,64 207,72V84Q207,92 199,92H57Q49,92 49,84V72Q49,64 57,64Z M57,114H199Q207,114 207,122V134Q207,142 199,142H57Q49,142 49,134V122Q49,114 57,114Z M57,164H199Q207,164 207,172V184Q207,192 199,192H57Q49,192 49,184V172Q49,164 57,164Z" />
+        <path android:fillColor="#4c94f5" android:pathData="M57,64H159Q167,64 167,72V84Q167,92 159,92H57Q49,92 49,84V72Q49,64 57,64Z M57,114H123Q131,114 131,122V134Q131,142 123,142H57Q49,142 49,134V122Q49,114 57,114Z M57,164H183Q191,164 191,172V184Q191,192 183,192H57Q49,192 49,184V172Q49,164 57,164Z" />
+        <path android:strokeColor="#e6efff" android:strokeWidth="3" android:pathData="M168,68v3m0,3v3m0,3v3m0,3v2 M168,118v3m0,3v3m0,3v3m0,3v2 M168,168v3m0,3v3m0,3v3m0,3v2" />
+    </group>
+</vector>

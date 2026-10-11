@@ -1,0 +1,38 @@
+name: Windows verification and portable release
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test integration_test
+      - run: flutter analyze
+      - run: flutter test --reporter expanded
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - run: npm install --prefix .tools/sql-test --no-audit --no-fund @electric-sql/pglite@0.5.8
+      - run: node tool/test-supabase.mjs
+      - run: ./tool/test-windows.ps1
+      - run: ./tool/test-windows.ps1 -SkipBuild -Autostart
+      - run: ./tool/package.ps1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: TrackStudy-windows-x64
+          path: dist/TrackStudy-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 7
