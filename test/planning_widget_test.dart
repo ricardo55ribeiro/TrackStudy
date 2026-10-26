@@ -98,7 +98,7 @@ void main() {
       final context = tester.element(find.byType(StudyShell));
       final container = ProviderScope.containerOf(context);
       container.read(studyProvider).setTabVisible(StudyTab.week, false);
-      expect(container.read(studyProvider).tabVisible(StudyTab.week), isTrue);
+      expect(container.read(studyProvider).tabVisible(StudyTab.week), isFalse);
       container.read(studyProvider).setTabVisible(StudyTab.month, true);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('tab-month')), findsOneWidget);

@@ -12,6 +12,7 @@ import 'settings.dart';
 import '../domain/planning.dart';
 import 'schedule.dart';
 import 'monthly.dart';
+import 'android_navigation.dart';
 
 class TrackStudyApp extends ConsumerWidget {
   const TrackStudyApp({super.key});
@@ -89,46 +90,90 @@ class StudyShell extends ConsumerStatefulWidget {
 }
 
 class _StudyShellState extends ConsumerState<StudyShell> {
-  StudyTab page = StudyTab.week;
+  late StudyTab page;
   bool settingsOpen = false;
+  final scaffoldKey = GlobalKey<ScaffoldState>();
   final navigationScroll = ScrollController();
+  @override
+  void initState() {
+    super.initState();
+    page = ref.read(studyProvider).enabledTabs.first;
+  }
+
   @override
   void dispose() {
     navigationScroll.dispose();
     super.dispose();
   }
 
+  Future<void> openSettings() async {
+    scaffoldKey.currentState?.closeDrawer();
+    setState(() => settingsOpen = true);
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+    );
+    if (mounted) setState(() => settingsOpen = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = ref.watch(studyProvider);
     final phone = phoneLayout(context);
+    final android = Theme.of(context).platform == TargetPlatform.android;
     if (!c.tabVisible(page)) {
-      page = StudyTab.week;
+      page = c.enabledTabs.first;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && navigationScroll.hasClients) navigationScroll.jumpTo(0);
       });
     }
     return Scaffold(
+      key: scaffoldKey,
+      drawer: android
+          ? AndroidTabDrawer(
+              children: [
+                for (final tab in c.enabledTabs)
+                  AndroidTabItem(
+                    key: ValueKey('tab-${tab.name}'),
+                    title: tab.label,
+                    selected: page == tab,
+                    onTap: () {
+                      if (page != tab) setState(() => page = tab);
+                      scaffoldKey.currentState!.closeDrawer();
+                    },
+                  ),
+              ],
+            )
+          : null,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1180),
             child: Column(
               children: [
-                Padding(
-                  padding: phone
-                      ? const EdgeInsets.fromLTRB(8, 8, 8, 4)
-                      : const EdgeInsets.fromLTRB(28, 18, 20, 10),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: SingleChildScrollView(
-                          controller: navigationScroll,
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              for (final tab in c.tabOrder)
-                                if (c.tabVisible(tab))
+                if (android)
+                  AndroidNavigationBar(
+                    title: page.label,
+                    onOpenDrawer: () {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      scaffoldKey.currentState!.openDrawer();
+                    },
+                    onSettings: openSettings,
+                  )
+                else
+                  Padding(
+                    padding: phone
+                        ? const EdgeInsets.fromLTRB(8, 8, 8, 4)
+                        : const EdgeInsets.fromLTRB(28, 18, 20, 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: SingleChildScrollView(
+                            controller: navigationScroll,
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                for (final tab in c.enabledTabs)
                                   TextButton(
                                     key: ValueKey('tab-${tab.name}'),
                                     style: TextButton.styleFrom(
@@ -142,7 +187,7 @@ class _StudyShellState extends ConsumerState<StudyShell> {
                                     ),
                                     onPressed: () => setState(() => page = tab),
                                     child: Text(
-                                      phone ? tab.compactLabel : tab.label,
+                                      tab.label,
                                       style: TextStyle(
                                         fontWeight: page == tab
                                             ? FontWeight.w600
@@ -150,27 +195,18 @@ class _StudyShellState extends ConsumerState<StudyShell> {
                                       ),
                                     ),
                                   ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      IconButton(
-                        tooltip: 'Settings',
-                        onPressed: () async {
-                          setState(() => settingsOpen = true);
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => const SettingsScreen(),
-                            ),
-                          );
-                          if (mounted) setState(() => settingsOpen = false);
-                        },
-                        icon: const Icon(Icons.settings_outlined, size: 20),
-                      ),
-                    ],
+                        IconButton(
+                          tooltip: 'Settings',
+                          onPressed: openSettings,
+                          icon: const Icon(Icons.settings_outlined, size: 20),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
                 if (page == StudyTab.week || page == StudyTab.review)
                   Padding(
                     padding: phone

@@ -116,7 +116,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
           children: [
             Expanded(
               child: Text(
-                'Weekly review',
+                'Weekly Review',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
             ),

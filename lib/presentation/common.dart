@@ -12,8 +12,8 @@ double pageInset(BuildContext context, {double desktop = 34}) =>
 String weekLabel(Week week) {
   final a = week.start, b = week.end;
   return a.month == b.month
-      ? '${a.day}–${DateFormat('d MMMM yyyy').format(b)}'
-      : '${DateFormat('d MMM').format(a)} – ${DateFormat('d MMM yyyy').format(b)}';
+      ? '${a.day}-${DateFormat('d MMMM yyyy').format(b)}'
+      : '${DateFormat('d MMM').format(a)} - ${DateFormat('d MMM yyyy').format(b)}';
 }
 
 void showFailure(BuildContext context, Object error) {

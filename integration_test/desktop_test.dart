@@ -10,11 +10,13 @@ import 'package:trackstudy/data/database.dart';
 import 'package:trackstudy/data/local_repository.dart';
 import 'package:trackstudy/domain/week.dart';
 import 'package:trackstudy/presentation/app.dart';
+import 'package:trackstudy/presentation/monthly.dart';
 import 'package:trackstudy/sync/auth_service.dart';
 import 'package:trackstudy/domain/planning.dart';
 import 'package:trackstudy/domain/models.dart';
 import 'package:uuid/uuid.dart';
 import '../test/support/tab_reordering.dart';
+import '../test/support/settings_acceptance.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -189,6 +191,7 @@ void main() {
           type: AcademicType.exam,
         ),
       );
+      await exerciseCategorySettings(tester, touch: false);
       await exerciseTabReordering(tester, touch: false);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
@@ -199,7 +202,7 @@ void main() {
       expect(repository.journal('').single.answer, 'Native answer');
       expect(
         repository.preference('tab.order', ''),
-        '["month","journal","review","schedule"]',
+        '["month","week","journal","review","schedule"]',
       );
       expect(
         repository.academicEvents(DateTime(2026, 10)).single.date,
@@ -211,6 +214,9 @@ void main() {
         reason: 'The reopened SQLite ledger must retain +10',
       );
       await launch();
+      expect(find.byType(MonthlyScreen), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('tab-week')));
+      await tester.pumpAndSettle();
       expect(find.text('10 / 8 h'), findsOneWidget);
       expect(
         repository

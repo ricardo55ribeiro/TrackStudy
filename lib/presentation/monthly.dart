@@ -56,27 +56,47 @@ class _MonthlyScreenState extends ConsumerState<MonthlyScreen> {
           ),
           Row(
             children: [
-              IconButton(
-                tooltip: 'Previous month',
-                onPressed: month.year > 1900 || month.month > 1
-                    ? () => move(-1)
-                    : null,
-                icon: const Icon(Icons.chevron_left),
-              ),
               Expanded(
-                child: Text(
-                  DateFormat.yMMMM().format(month),
-                  style: Theme.of(context).textTheme.titleMedium,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    key: const ValueKey('month-navigation'),
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'Previous month',
+                        onPressed: month.year > 1900 || month.month > 1
+                            ? () => move(-1)
+                            : null,
+                        icon: const Icon(Icons.chevron_left),
+                      ),
+                      Flexible(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              DateFormat.yMMMM().format(month),
+                              key: const ValueKey('month-label'),
+                              maxLines: 1,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Next month',
+                        onPressed: month.year < 9999 || month.month < 12
+                            ? () => move(1)
+                            : null,
+                        icon: const Icon(Icons.chevron_right),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              IconButton(
-                tooltip: 'Next month',
-                onPressed: month.year < 9999 || month.month < 12
-                    ? () => move(1)
-                    : null,
-                icon: const Icon(Icons.chevron_right),
-              ),
               TextButton(
+                key: const ValueKey('month-today'),
                 onPressed: () => setState(() {
                   selected = DateTime.now();
                   month = LocalDate.month(selected, 0);

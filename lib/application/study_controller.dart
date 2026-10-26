@@ -38,7 +38,7 @@ class StudyController extends ChangeNotifier with WidgetsBindingObserver {
   List<StudyTab> get tabOrder =>
       StudyTabOrder.decode(repository.preference('tab.order', ''));
   void reorderTab(int oldIndex, int newIndex) {
-    final tabs = tabOrder.where((tab) => tab != StudyTab.week).toList();
+    final tabs = tabOrder.toList();
     if (oldIndex < 0 ||
         oldIndex >= tabs.length ||
         newIndex < 0 ||
@@ -54,13 +54,42 @@ class StudyController extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
-  bool tabVisible(StudyTab tab) =>
-      tab == StudyTab.week ||
-      repository.preference('tab.${tab.name}', 'true') != 'false';
-  void setTabVisible(StudyTab tab, bool visible) {
-    if (tab != StudyTab.week) {
-      perform(() => repository.setPreference('tab.${tab.name}', '$visible'));
+  List<StudyTab> get enabledTabs {
+    final order = tabOrder;
+    final enabled = order
+        .where(
+          (tab) => repository.preference('tab.${tab.name}', 'true') != 'false',
+        )
+        .toList();
+    // Keep malformed or restored preferences navigable without changing data
+    return enabled.isEmpty ? [order.first] : enabled;
+  }
+
+  bool tabVisible(StudyTab tab) => enabledTabs.contains(tab);
+  bool setTabVisible(StudyTab tab, bool visible) {
+    if (!visible && tabVisible(tab) && enabledTabs.length == 1) return false;
+    return perform(
+      () => repository.setPreference('tab.${tab.name}', '$visible'),
+    );
+  }
+
+  void reorderCategory(int oldIndex, int newIndex) {
+    final categories = repository.categories();
+    final active = categories.where((category) => !category.archived).toList();
+    if (oldIndex < 0 ||
+        oldIndex >= active.length ||
+        newIndex < 0 ||
+        newIndex >= active.length) {
+      return;
     }
+    active.insert(newIndex, active.removeAt(oldIndex));
+    var index = 0;
+    // Keep archived slots so restoration retains a sensible existing position
+    final ids = [
+      for (final category in categories)
+        category.archived ? category.id : active[index++].id,
+    ];
+    perform(() => repository.reorder(ids));
   }
 
   ThemeMode get theme => ThemeMode.values.firstWhere(

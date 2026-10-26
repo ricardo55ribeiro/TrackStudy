@@ -211,6 +211,11 @@ void main() {
       await launch(tester);
       await tester.tap(find.byTooltip('Settings'));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Research'),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
       await tester.tap(find.text('Research'));
       await tester.pumpAndSettle();
       await tester.enterText(find.widgetWithText(TextField, 'Target'), '5');
@@ -220,6 +225,11 @@ void main() {
       await tester.enterText(find.widgetWithText(TextField, 'Target'), '10');
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Add category'),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
       await tester.tap(find.text('Add category'));
       await tester.pumpAndSettle();
       await tester.enterText(
@@ -228,12 +238,18 @@ void main() {
       );
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Open Source'),
+        -100,
+        scrollable: find.byType(Scrollable).last,
+      );
       expect(find.text('Open Source'), findsOneWidget);
       await tester.tap(find.byTooltip('Archive category').last);
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Archive'));
       await tester.pumpAndSettle();
-      expect(find.text('Archived'), findsOneWidget);
+      expect(find.text('Archived Categories'), findsOneWidget);
+      expect(find.text('Open Source'), findsNothing);
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(find.text('0 / 10 h'), findsOneWidget);
@@ -245,7 +261,7 @@ void main() {
     'research journal three prompts, searchable history and latest Next',
     (tester) async {
       await launch(tester);
-      await tester.tap(find.text('Research journal').first);
+      await tester.tap(find.text('Research Journal').first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('New entry'));
       await tester.pumpAndSettle();
@@ -286,7 +302,7 @@ void main() {
       final p = repository.loadWeek(week, current: week).first;
       repository.commit(p.goalId, 700, week);
       await launch(tester);
-      await tester.tap(find.text('Weekly review').first);
+      await tester.tap(find.text('Weekly Review').first);
       await tester.pumpAndSettle();
       expect(find.text('7 / 8 h'), findsOneWidget);
       await tester.enterText(

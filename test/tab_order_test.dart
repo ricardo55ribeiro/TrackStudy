@@ -23,8 +23,8 @@ void main() {
       expect(
         StudyTabOrder.decode('["month","week","month","unknown",3,"journal"]'),
         [
-          StudyTab.week,
           StudyTab.month,
+          StudyTab.week,
           StudyTab.journal,
           StudyTab.review,
           StudyTab.schedule,
@@ -47,7 +47,7 @@ void main() {
       var repo = LocalStudyRepository(StudyDatabase(sqlite3.open(path)));
       var c = StudyController(repo, watchClock: false);
       try {
-        c.reorderTab(3, 0);
+        c.reorderTab(4, 0);
         c.setTabVisible(StudyTab.month, false);
         c.setTabVisible(StudyTab.week, false);
         final order = c.tabOrder;
@@ -58,10 +58,10 @@ void main() {
         c = StudyController(repo, watchClock: false);
         expect(c.tabOrder, order);
         expect(c.tabVisible(StudyTab.month), isFalse);
-        expect(c.tabVisible(StudyTab.week), isTrue);
+        expect(c.tabVisible(StudyTab.week), isFalse);
         c.setTabVisible(StudyTab.month, true);
         expect(c.tabOrder, order);
-        c.reorderTab(0, 3);
+        c.reorderTab(0, 4);
         expect(c.tabOrder, StudyTab.values);
         repo.restoreJson(backup);
         expect(c.tabOrder, order);
@@ -92,8 +92,8 @@ void main() {
     ).synchronize(account, project, () => true);
     await sync(pc);
     await sync(phone);
-    a.reorderTab(2, 0);
-    b.reorderTab(3, 0);
+    a.reorderTab(3, 0);
+    b.reorderTab(4, 0);
     a.setTabVisible(StudyTab.journal, false);
     expect(
       SyncStore(pc.database).pending + SyncStore(phone.database).pending,
@@ -101,8 +101,8 @@ void main() {
     );
     await sync(pc);
     await sync(phone);
-    expect(a.tabOrder[1], StudyTab.schedule);
-    expect(b.tabOrder[1], StudyTab.month);
+    expect(a.tabOrder.first, StudyTab.schedule);
+    expect(b.tabOrder.first, StudyTab.month);
     expect(b.tabVisible(StudyTab.journal), isTrue);
     expect(cloud.tables.containsKey('preferences'), isFalse);
   });

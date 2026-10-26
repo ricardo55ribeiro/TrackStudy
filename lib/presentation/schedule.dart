@@ -233,7 +233,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
                                   1,
                               child: Tooltip(
                                 message:
-                                    '${p.block.title}\n${WallTime.label(p.block.startMinute)}–${WallTime.label(p.block.endMinute)}${p.block.description == null ? '' : '\n${p.block.description}'}',
+                                    '${p.block.title}\n${WallTime.label(p.block.startMinute)}-${WallTime.label(p.block.endMinute)}${p.block.description == null ? '' : '\n${p.block.description}'}',
                                 child: Material(
                                   color: scheme.primaryContainer.withValues(
                                     alpha: .75,
@@ -276,7 +276,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
                                                   if (box.maxHeight >=
                                                       58 * textScale)
                                                     Text(
-                                                      '${WallTime.label(p.block.startMinute)}–${WallTime.label(p.block.endMinute)}',
+                                                      '${WallTime.label(p.block.startMinute)}-${WallTime.label(p.block.endMinute)}',
                                                       maxLines: 1,
                                                       overflow:
                                                           TextOverflow.ellipsis,

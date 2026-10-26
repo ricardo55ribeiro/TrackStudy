@@ -15,7 +15,10 @@ class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = ref.watch(studyProvider), categories = c.repository.categories();
+    final c = ref.watch(studyProvider);
+    final categories = c.repository.categories();
+    final active = categories.where((category) => !category.archived).toList();
+    final archived = categories.where((category) => category.archived).toList();
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: Center(
@@ -32,21 +35,6 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 sliver: SliverList.list(
                   children: [
-                    const SectionTitle('Categories'),
-                    const Text(
-                      'Changes apply to this week and future weeks. Past weeks keep their original goals.',
-                    ),
-                    const SizedBox(height: 12),
-                    for (var i = 0; i < categories.length; i++)
-                      _category(context, ref, categories, i),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: () => _edit(context, null),
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Add category'),
-                      ),
-                    ),
                     const SectionTitle('Appearance'),
                     Wrap(
                       spacing: 8,
@@ -65,7 +53,7 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                     const SectionTitle('Tabs on this device'),
                     const Text(
-                      'This week is always first. Drag the handles to reorder. Hidden tabs keep their position and data.',
+                      'Drag the handles to reorder. Hidden tabs keep their position and data. The first enabled tab opens at startup.',
                     ),
                   ],
                 ),
@@ -76,6 +64,59 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 sliver: const TabOrderSettings(),
               ),
+              if (c.tabVisible(StudyTab.week)) ...[
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: pageInset(context, desktop: 28),
+                  ),
+                  sliver: SliverList.list(
+                    children: const [
+                      SectionTitle('Categories'),
+                      Text(
+                        'Changes apply to this week and future weeks. Past weeks keep their original goals.',
+                      ),
+                      SizedBox(height: 12),
+                    ],
+                  ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: pageInset(context, desktop: 28),
+                  ),
+                  sliver: SliverReorderableList(
+                    itemCount: active.length,
+                    onReorderItem: c.reorderCategory,
+                    proxyDecorator: (child, index, animation) =>
+                        _dragProxy(context, child),
+                    itemBuilder: (context, index) =>
+                        _category(context, ref, active[index], index: index),
+                  ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: pageInset(context, desktop: 28),
+                  ),
+                  sliver: SliverList.list(
+                    children: [
+                      if (archived.isNotEmpty)
+                        ArchivedCategories(
+                          children: [
+                            for (final category in archived)
+                              _category(context, ref, category),
+                          ],
+                        ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () => _edit(context, null),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Add category'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(
                   pageInset(context, desktop: 28),
@@ -121,7 +162,7 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Export includes categories, weeks, undone entries, journal entries, reviews, schedules, academic events, and local preferences. Windows startup and background settings stay on this device. Restoring creates a safety backup first.',
+                      'Export includes categories, weeks, undone entries, journal entries, reviews, schedules, academic events and local preferences. Windows startup and background settings stay on this device. Restoring creates a safety backup first.',
                     ),
                     const SectionTitle('Sync'),
                     const SyncSettings(),
@@ -181,10 +222,10 @@ class SettingsScreen extends ConsumerWidget {
   Widget _category(
     BuildContext context,
     WidgetRef ref,
-    List<Category> categories,
-    int index,
-  ) {
-    final category = categories[index], c = ref.read(studyProvider);
+    Category category, {
+    int? index,
+  }) {
+    final c = ref.read(studyProvider);
     final label = TextButton(
       style: TextButton.styleFrom(
         alignment: Alignment.centerLeft,
@@ -209,30 +250,8 @@ class SettingsScreen extends ConsumerWidget {
     );
     final controls = <Widget>[
       IconButton(
-        tooltip: 'Move up',
-        onPressed: index == 0 ? null : () => _move(ref, categories, index, -1),
-        icon: const Icon(Icons.keyboard_arrow_up, size: 20),
-      ),
-      IconButton(
-        tooltip: 'Move down',
-        onPressed: index == categories.length - 1
-            ? null
-            : () => _move(ref, categories, index, 1),
-        icon: const Icon(Icons.keyboard_arrow_down, size: 20),
-      ),
-      if (!category.archived)
-        Switch(
-          value: category.active,
-          onChanged: (v) => c.perform(
-            () => c.repository.setCategoryStatus(
-              category.id,
-              active: v,
-              archived: false,
-            ),
-          ),
-        ),
-      IconButton(
-        tooltip: category.archived ? 'Reactivate category' : 'Archive category',
+        key: ValueKey('category-archive-${category.id}'),
+        tooltip: category.archived ? 'Restore category' : 'Archive category',
         icon: Icon(
           category.archived ? Icons.unarchive_outlined : Icons.archive_outlined,
           size: 20,
@@ -255,8 +274,23 @@ class SettingsScreen extends ConsumerWidget {
           }
         },
       ),
+      if (!category.archived) ...[
+        Switch(
+          key: ValueKey('category-toggle-${category.id}'),
+          value: category.active,
+          onChanged: (v) => c.perform(
+            () => c.repository.setCategoryStatus(
+              category.id,
+              active: v,
+              archived: false,
+            ),
+          ),
+        ),
+        _OrderHandle(id: 'category-drag-${category.id}', index: index!),
+      ],
     ];
     return Padding(
+      key: ValueKey('category-${category.id}'),
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: phoneLayout(context)
           ? Column(
@@ -276,14 +310,6 @@ class SettingsScreen extends ConsumerWidget {
               ],
             ),
     );
-  }
-
-  void _move(WidgetRef ref, List<Category> categories, int index, int offset) {
-    final ids = categories.map((c) => c.id).toList();
-    final id = ids.removeAt(index);
-    ids.insert(index + offset, id);
-    final c = ref.read(studyProvider);
-    c.perform(() => c.repository.reorder(ids));
   }
 
   Future<void> _edit(BuildContext context, Category? category) =>
@@ -361,15 +387,10 @@ class TabOrderSettings extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = ref.watch(studyProvider);
-    final tabs = c.tabOrder.where((tab) => tab != StudyTab.week).toList();
-    final touch = Theme.of(context).platform == TargetPlatform.android;
+    final tabs = c.tabOrder;
     return SliverReorderableList(
       itemCount: tabs.length,
-      proxyDecorator: (child, index, animation) => Material(
-        elevation: 6,
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        child: child,
-      ),
+      proxyDecorator: (child, index, animation) => _dragProxy(context, child),
       onReorderItem: c.reorderTab,
       itemBuilder: (context, i) => Row(
         key: ValueKey('tab-order-${tabs[i].name}'),
@@ -379,38 +400,96 @@ class TabOrderSettings extends ConsumerWidget {
               contentPadding: EdgeInsets.zero,
               title: Text(tabs[i].label),
               value: c.tabVisible(tabs[i]),
-              onChanged: (value) => c.setTabVisible(tabs[i], value),
-            ),
-          ),
-          Tooltip(
-            message: touch ? 'Hold and drag to reorder' : 'Drag to reorder',
-            child: touch
-                ? ReorderableDelayedDragStartListener(
-                    key: ValueKey('tab-drag-${tabs[i].name}'),
-                    index: i,
-                    child: const SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: Icon(Icons.drag_handle, size: 22),
-                    ),
-                  )
-                : ReorderableDragStartListener(
-                    key: ValueKey('tab-drag-${tabs[i].name}'),
-                    index: i,
-                    child: const MouseRegion(
-                      cursor: SystemMouseCursors.grab,
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Icon(Icons.drag_handle, size: 22),
+              onChanged: (value) {
+                if (!c.setTabVisible(tabs[i], value)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        c.error ?? 'Keep at least one tab enabled.',
                       ),
                     ),
-                  ),
+                  );
+                }
+              },
+            ),
           ),
+          _OrderHandle(id: 'tab-drag-${tabs[i].name}', index: i),
         ],
       ),
     );
   }
+}
+
+Widget _dragProxy(BuildContext context, Widget child) => Material(
+  elevation: 6,
+  color: Theme.of(context).colorScheme.surfaceContainer,
+  child: child,
+);
+
+class _OrderHandle extends StatelessWidget {
+  final String id;
+  final int index;
+  const _OrderHandle({required this.id, required this.index});
+
+  @override
+  Widget build(BuildContext context) {
+    final touch = Theme.of(context).platform == TargetPlatform.android;
+    const handle = SizedBox(
+      width: 48,
+      height: 48,
+      child: Icon(Icons.drag_handle, size: 22),
+    );
+    return Tooltip(
+      message: touch ? 'Hold and drag to reorder' : 'Drag to reorder',
+      child: touch
+          ? ReorderableDelayedDragStartListener(
+              key: ValueKey(id),
+              index: index,
+              child: handle,
+            )
+          : ReorderableDragStartListener(
+              key: ValueKey(id),
+              index: index,
+              child: const MouseRegion(
+                cursor: SystemMouseCursors.grab,
+                child: handle,
+              ),
+            ),
+    );
+  }
+}
+
+class ArchivedCategories extends StatefulWidget {
+  final List<Widget> children;
+  const ArchivedCategories({super.key, required this.children});
+
+  @override
+  State<ArchivedCategories> createState() => _ArchivedCategoriesState();
+}
+
+class _ArchivedCategoriesState extends State<ArchivedCategories> {
+  bool expanded = false;
+
+  @override
+  Widget build(BuildContext context) => ExpansionTile(
+    key: const ValueKey('archived-categories'),
+    tilePadding: EdgeInsets.zero,
+    dense: true,
+    shape: const Border(),
+    collapsedShape: const Border(),
+    onExpansionChanged: (value) => setState(() => expanded = value),
+    leading: AnimatedRotation(
+      turns: expanded ? .25 : 0,
+      duration: const Duration(milliseconds: 180),
+      child: const Icon(Icons.chevron_right, size: 20),
+    ),
+    trailing: const SizedBox.shrink(),
+    title: Text(
+      'Archived Categories',
+      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+    ),
+    children: widget.children,
+  );
 }
 
 class CategoryEditor extends ConsumerStatefulWidget {
@@ -490,7 +569,7 @@ class _CategoryEditorState extends ConsumerState<CategoryEditor> {
               }),
             ),
             for (final f in [
-              (unit, 'Display unit (h, count, or custom)'),
+              (unit, 'Display unit (h, count or custom)'),
               (floor, 'Floor'),
               (target, 'Target'),
               (increment, 'Default addition'),

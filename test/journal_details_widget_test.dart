@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'support/navigation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uuid/uuid.dart';
@@ -34,7 +35,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('tab-journal')));
+      await selectTab(tester, StudyTab.journal);
       await tester.pumpAndSettle();
       expect(find.byType(JournalSection), findsNWidgets(5));
       expect(find.byKey(ValueKey('answer-${blank.id}')), findsNothing);

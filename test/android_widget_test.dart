@@ -11,6 +11,7 @@ import 'package:trackstudy/platform/json_files.dart';
 import 'package:trackstudy/presentation/app.dart';
 import 'package:trackstudy/domain/planning.dart';
 import 'package:uuid/uuid.dart';
+import 'support/navigation.dart';
 
 // Today's live time line keeps animating; wait for UI transitions, not for
 // the entire schedule to become idle. This also works when tests run on Monday.
@@ -67,8 +68,7 @@ void main() {
           ),
         );
         await launch(tester, width);
-        await tester.ensureVisible(find.byKey(const ValueKey('tab-schedule')));
-        await tester.tap(find.byKey(const ValueKey('tab-schedule')));
+        await selectTab(tester, StudyTab.schedule);
         await pumpSchedule(tester);
         await tester.tap(find.byKey(const ValueKey('weekday-1')));
         await pumpSchedule(tester);
@@ -86,8 +86,7 @@ void main() {
         await pumpSchedule(tester);
         expect(repository.schedule(1).length, 4);
         tester.view.resetViewInsets();
-        await tester.ensureVisible(find.byKey(const ValueKey('tab-month')));
-        await tester.tap(find.byKey(const ValueKey('tab-month')));
+        await selectTab(tester, StudyTab.month);
         await tester.pumpAndSettle();
         await tester.ensureVisible(
           find.byKey(ValueKey('date-${LocalDate.key(today)}')),
@@ -123,7 +122,7 @@ void main() {
         expect(tester.widget<TextField>(input).controller!.text, isEmpty);
         expect(tester.takeException(), isNull);
         tester.view.resetViewInsets();
-        await tester.tap(find.text('Journal'));
+        await selectTab(tester, StudyTab.journal);
         await tester.pumpAndSettle();
         await tester.tap(find.text('New entry'));
         await tester.pumpAndSettle();
@@ -139,8 +138,7 @@ void main() {
         expect(repository.journal('').single.learned, 'Phone journal');
         expect(tester.takeException(), isNull);
         tester.view.resetViewInsets();
-        await tester.ensureVisible(find.text('Review'));
-        await tester.tap(find.text('Review'));
+        await selectTab(tester, StudyTab.review);
         await tester.pumpAndSettle();
         expect(find.text('Score'), findsOneWidget);
         await tester.scrollUntilVisible(
@@ -157,6 +155,11 @@ void main() {
         FocusManager.instance.primaryFocus?.unfocus();
         await tester.tap(find.byTooltip('Settings'));
         await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.text('Research'),
+          200,
+          scrollable: find.byType(Scrollable).last,
+        );
         await tester.tap(find.text('Research').last);
         await tester.pumpAndSettle();
         tester.view.viewInsets = const FakeViewPadding(bottom: 280);

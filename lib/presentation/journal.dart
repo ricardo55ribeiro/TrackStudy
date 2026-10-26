@@ -33,7 +33,7 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
           children: [
             Expanded(
               child: Text(
-                'Research journal',
+                'Research Journal',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
             ),

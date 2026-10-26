@@ -44,7 +44,7 @@ abstract final class WallTime {
         return hour * 60 + minute;
       }
     }
-    throw const FormatException('Use a time such as 08:30 (00:00–24:00).');
+    throw const FormatException('Use a time such as 08:30 (00:00-24:00).');
   }
 }
 
@@ -67,7 +67,7 @@ class ScheduleBlock {
       );
     }
     if (title.trim().isEmpty || title.length > 120) {
-      throw const FormatException('Enter a title of 1–120 characters.');
+      throw const FormatException('Enter a title of 1-120 characters.');
     }
     if (weekday < 1 ||
         weekday > 7 ||
@@ -126,7 +126,7 @@ class AcademicEvent {
     LocalDate.parse(date);
     if (title.trim().isEmpty || title.length > 120 || note.length > 2000) {
       throw const FormatException(
-        'Enter a title of 1–120 characters and a note up to 2,000 characters.',
+        'Enter a title of 1-120 characters and a note up to 2,000 characters.',
       );
     }
   }
@@ -193,23 +193,16 @@ enum StudyTab {
   month;
 
   String get label => switch (this) {
-    week => 'This week',
-    journal => 'Research journal',
-    review => 'Weekly review',
+    week => 'Progress Bars',
+    journal => 'Research Journal',
+    review => 'Weekly Review',
     schedule => 'Daily Schedule',
     month => 'Monthly View',
   };
-  String get compactLabel => switch (this) {
-    week => 'This week',
-    journal => 'Journal',
-    review => 'Review',
-    schedule => 'Schedule',
-    month => 'Month',
-  };
 }
 
-/// Stable IDs in a device-local preference. Unknown/duplicate IDs are ignored;
-/// newly introduced tabs are appended and This week always remains first.
+/// Stable IDs in a device-local preference, ignoring unknown and duplicate IDs
+/// Legacy orders omit week, so insert it first only when it is missing
 abstract final class StudyTabOrder {
   static List<StudyTab> decode(String value) {
     try {
@@ -222,12 +215,16 @@ abstract final class StudyTabOrder {
   }
 
   static List<StudyTab> normalize(Iterable<Object?> ids) {
-    final tabs = <StudyTab>{StudyTab.week};
+    final tabs = <StudyTab>{};
     for (final id in ids) {
       for (final tab in StudyTab.values) {
         if (tab.name == id) tabs.add(tab);
       }
     }
-    return List.unmodifiable(tabs..addAll(StudyTab.values));
+    return List.unmodifiable({
+      if (!tabs.contains(StudyTab.week)) StudyTab.week,
+      ...tabs,
+      ...StudyTab.values,
+    });
   }
 }

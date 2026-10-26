@@ -19,6 +19,8 @@ import 'package:trackstudy/sync/sync_engine.dart';
 import 'package:trackstudy/sync/sync_store.dart';
 import '../test/support/sync_fakes.dart';
 import '../test/support/tab_reordering.dart';
+import '../test/support/settings_acceptance.dart';
+import '../test/support/android_drawer_acceptance.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -245,6 +247,10 @@ void main() {
         expect(cloud.tables['categories']!.length, 7);
         expect(phoneStore.conflicts + pcStore.conflicts, 0);
         expect(cloud.conflicts, isEmpty);
+        await exerciseAndroidDrawer(tester);
+        await exerciseCategorySettings(tester, touch: true);
+        await tester.pump(const Duration(seconds: 3));
+        await sync.sync(manual: true);
         await exerciseTabReordering(tester, touch: true);
         expect(phoneStore.pending, 0);
         expect(windows.preference('tab.order', ''), '');
@@ -258,11 +264,28 @@ void main() {
         expect(phone.journal('').single.answer, 'Phone answer');
         expect(
           phone.preference('tab.order', ''),
-          '["month","journal","review","schedule"]',
+          '["month","week","journal","review","schedule"]',
         );
         expect(
           phone.academicEvents(DateTime(2026, 10)).single.title,
           'Phone exam edit',
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [repositoryProvider.overrideWithValue(phone)],
+            child: const TrackStudyApp(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<Text>(find.byKey(const ValueKey('android-tab-title')))
+              .data,
+          'Monthly View',
+        );
+        expect(
+          tester.state<ScaffoldState>(find.byType(Scaffold).first).isDrawerOpen,
+          isFalse,
         );
       } finally {
         await tester.pumpWidget(const SizedBox());

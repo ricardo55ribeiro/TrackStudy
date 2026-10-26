@@ -15,7 +15,9 @@ A local-first weekly tracking app for Windows and Android. Record study hours an
 
 Type an amount and press **Enter** or **+**. Inputs start empty and clear after a successful addition. **Undo** reverses the latest active entry; click the total beneath a bar to inspect entries. Weeks start on local calendar Mondays, and historical weeks remain available.
 
-In **Settings → Tabs on this device**, drag a handle to reorder tabs; hold the handle first on Android. This Week stays first, and hidden tabs retain their position. These preferences are not synchronized.
+In **Settings → Tabs on this device**, drag a handle to reorder any tab, including **Progress Bars**. Hold the handle first on Android. Hidden tabs retain their position and data, at least one tab stays enabled and startup opens the first enabled tab. These preferences are not synchronized.
+
+Categories use the same drag handles and their order synchronizes across devices. Archived categories stay in a collapsed **Archived Categories** section with a restore control. Hiding Progress Bars also hides category management in Settings while preserving all tracking data.
 
 ## Windows
 
@@ -36,6 +38,8 @@ Normal launch and tray **Open TrackStudy** maximize the window. In Settings, **R
 For environments with extracted MSVC/SDK tools, `tool/build-portable.ps1` provides an optional local-toolchain build. The standard Visual Studio build remains supported; toolchains are not included in the app package.
 
 ## Android
+
+Open the hamburger menu to switch between enabled tabs in their saved order. Selecting a tab closes the drawer and updates the title beside the menu button. Settings stays at the top right. Windows retains its horizontal tabs.
 
 Install an Android SDK and compatible JDK, then build with:
 
