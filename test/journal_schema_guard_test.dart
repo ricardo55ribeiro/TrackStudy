@@ -9,13 +9,20 @@ import 'journal_details_test.dart' show memory, thought, lesson;
 import 'support/sync_fakes.dart' show account, project;
 
 void main() {
-  for (final missingTable in ['journal', 'schedule_blocks']) {
+  for (final missingTable in [
+    'journal',
+    'schedule_blocks',
+    'todo_topics',
+    'todo_tasks',
+  ]) {
     test(
       'missing 005 $missingTable columns prevents uploads and retains local edits',
       () async {
         final repo = memory();
         addTearDown(repo.close);
         final entry = thought();
+        final topic = repo.addTodoTopic('Safe offline');
+        repo.addTodoTask(topic, 'Keep this task');
         repo.saveJournal(entry);
         repo.answerJournal(
           entry.id,
@@ -34,7 +41,11 @@ void main() {
             expect(
               select,
               contains(
-                missingTable == 'journal' ? 'answered_at' : 'description',
+                missingTable == 'journal'
+                    ? 'answered_at'
+                    : missingTable == 'schedule_blocks'
+                    ? 'description'
+                    : 'sync_history',
               ),
             );
             request.response.statusCode = 400;
@@ -65,6 +76,7 @@ void main() {
         expect(store.pending, pending);
         expect(repo.journal('').single.answer, 'Keep this answer');
         expect(repo.schedule(1).single.description, 'Keep this room');
+        expect(repo.todoTasks(topic).single.text, 'Keep this task');
       },
     );
   }

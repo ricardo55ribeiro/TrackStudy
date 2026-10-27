@@ -66,7 +66,7 @@ void main() {
         tester
             .widgetList<AndroidTabItem>(find.byType(AndroidTabItem))
             .map((e) => e.title),
-        ['Monthly View', 'Daily Schedule', 'Research Journal'],
+        ['Monthly View', 'Daily Schedule', 'To-Do List', 'Research Journal'],
       );
       await tester.tap(find.byKey(const ValueKey('tab-month')));
       await tester.pumpAndSettle();
@@ -79,7 +79,7 @@ void main() {
       await tester.tap(find.byTooltip('Settings'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(SwitchListTile, 'Monthly View'));
-      c.reorderTab(3, 0);
+      c.reorderTab(4, 0);
       await tester.pumpAndSettle();
       await tester.pageBack();
       await tester.pumpAndSettle();
@@ -89,7 +89,7 @@ void main() {
         tester
             .widgetList<AndroidTabItem>(find.byType(AndroidTabItem))
             .map((e) => e.title),
-        ['Research Journal', 'Daily Schedule'],
+        ['Research Journal', 'Daily Schedule', 'To-Do List'],
       );
       expect(
         tester
@@ -103,7 +103,7 @@ void main() {
         tester
             .widgetList<AndroidTabItem>(find.byType(AndroidTabItem))
             .map((e) => e.title),
-        ['Research Journal', 'Monthly View', 'Daily Schedule'],
+        ['Research Journal', 'Monthly View', 'Daily Schedule', 'To-Do List'],
       );
       await tester.pumpWidget(const SizedBox());
       await launch(tester);
@@ -129,7 +129,7 @@ void main() {
       final tabs = find.byWidgetPredicate(
         (w) => w is TextButton && w.key.toString().contains('tab-'),
       );
-      expect(tabs, findsNWidgets(5));
+      expect(tabs, findsNWidgets(6));
       expect(find.byTooltip('Settings'), findsOneWidget);
       final rowY = tester.getTopLeft(tabs.first).dy;
       for (final element in tabs.evaluate()) {

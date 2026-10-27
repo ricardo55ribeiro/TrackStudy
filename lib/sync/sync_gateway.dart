@@ -6,6 +6,8 @@ const syncTables = [
   'reviews',
   'schedule_blocks',
   'academic_events',
+  'todo_topics',
+  'todo_tasks',
 ];
 typedef SyncRow = Map<String, dynamic>;
 

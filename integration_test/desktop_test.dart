@@ -17,6 +17,7 @@ import 'package:trackstudy/domain/models.dart';
 import 'package:uuid/uuid.dart';
 import '../test/support/tab_reordering.dart';
 import '../test/support/settings_acceptance.dart';
+import '../test/support/todo_acceptance.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -192,17 +193,25 @@ void main() {
         ),
       );
       await exerciseCategorySettings(tester, touch: false);
+      await exerciseTodo(tester, touch: false);
       await exerciseTabReordering(tester, touch: false);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
       repository.close();
       repository = LocalStudyRepository(StudyDatabase(sqlite3.open(path)));
       expect(repository.schedule(1).single.title, 'Native Gym');
+      final todoTopic = repository.todoTopics().single.id;
+      expect(repository.todoTasks(todoTopic).map((t) => t.text), [
+        'Native A',
+        'Native B',
+        'Native C',
+      ]);
+      expect(repository.todoTasks(todoTopic).first.completed, isTrue);
       expect(repository.schedule(1).single.description, 'V0.04');
       expect(repository.journal('').single.answer, 'Native answer');
       expect(
         repository.preference('tab.order', ''),
-        '["month","week","journal","review","schedule"]',
+        '["month","week","todo","journal","review","schedule"]',
       );
       expect(
         repository.academicEvents(DateTime(2026, 10)).single.date,

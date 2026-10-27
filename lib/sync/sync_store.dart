@@ -167,6 +167,8 @@ class SyncStore {
           'reviews',
           'schedule_blocks',
           'academic_events',
+          'todo_topics',
+          'todo_tasks',
         ]) {
           if (database.handle
               .select('SELECT id FROM $table LIMIT 1')
@@ -185,6 +187,13 @@ class SyncStore {
       }
       setMeta('pristine_seed', '0');
       setMeta('applying', '0');
+      // Include children created offline after another device deleted the topic
+      database.handle.execute('''
+UPDATE todo_tasks SET
+ deleted_at=(SELECT deleted_at FROM todo_topics WHERE id=topic_id),
+ updated_at=(SELECT deleted_at FROM todo_topics WHERE id=topic_id)
+WHERE deleted_at IS NULL AND topic_id IN (SELECT id FROM todo_topics WHERE deleted_at IS NOT NULL)
+''');
     });
   }
 
@@ -249,11 +258,15 @@ class SyncStore {
       final remoteCovers = coversHistory(remoteHistory, localHistory);
       final divergent =
           !localCovers && !remoteCovers && !sameSyncContent(local, remote);
-      final order = remoteCovers && !localCovers
+      var order = remoteCovers && !localCovers
           ? 1
           : localCovers && !remoteCovers
           ? -1
           : _compare(remote, local);
+      if (table.startsWith('todo_') &&
+          (local['deleted_at'] != null) != (remote['deleted_at'] != null)) {
+        order = remote['deleted_at'] != null ? 1 : -1;
+      }
       if (order < 0) {
         if (divergent) _saveConflict(table, remote);
         database.handle.execute(
@@ -312,6 +325,7 @@ class SyncStore {
       'undone_at',
       'deleted_at',
       'answered_at',
+      'completed_at',
     ]) {
       if (data[field] != null) {
         data[field] = DateTime.parse(

@@ -25,6 +25,7 @@ void main() {
         [
           StudyTab.month,
           StudyTab.week,
+          StudyTab.todo,
           StudyTab.journal,
           StudyTab.review,
           StudyTab.schedule,
@@ -32,6 +33,7 @@ void main() {
       );
       expect(StudyTabOrder.decode('["schedule"]'), [
         StudyTab.week,
+        StudyTab.todo,
         StudyTab.schedule,
         StudyTab.journal,
         StudyTab.review,
@@ -47,7 +49,7 @@ void main() {
       var repo = LocalStudyRepository(StudyDatabase(sqlite3.open(path)));
       var c = StudyController(repo, watchClock: false);
       try {
-        c.reorderTab(4, 0);
+        c.reorderTab(5, 0);
         c.setTabVisible(StudyTab.month, false);
         c.setTabVisible(StudyTab.week, false);
         final order = c.tabOrder;
@@ -61,7 +63,7 @@ void main() {
         expect(c.tabVisible(StudyTab.week), isFalse);
         c.setTabVisible(StudyTab.month, true);
         expect(c.tabOrder, order);
-        c.reorderTab(0, 4);
+        c.reorderTab(0, 5);
         expect(c.tabOrder, StudyTab.values);
         repo.restoreJson(backup);
         expect(c.tabOrder, order);
@@ -92,8 +94,8 @@ void main() {
     ).synchronize(account, project, () => true);
     await sync(pc);
     await sync(phone);
-    a.reorderTab(3, 0);
-    b.reorderTab(4, 0);
+    a.reorderTab(4, 0);
+    b.reorderTab(5, 0);
     a.setTabVisible(StudyTab.journal, false);
     expect(
       SyncStore(pc.database).pending + SyncStore(phone.database).pending,

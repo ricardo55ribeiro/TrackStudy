@@ -28,14 +28,16 @@ void main() {
     addTearDown(c.dispose);
     expect(c.tabOrder, [
       StudyTab.week,
+      StudyTab.todo,
       StudyTab.month,
       StudyTab.schedule,
       StudyTab.journal,
       StudyTab.review,
     ]);
     expect(c.tabVisible(StudyTab.journal), isFalse);
-    c.reorderTab(0, 2);
+    c.reorderTab(0, 3);
     expect(c.tabOrder, [
+      StudyTab.todo,
       StudyTab.month,
       StudyTab.schedule,
       StudyTab.week,
@@ -43,9 +45,9 @@ void main() {
       StudyTab.review,
     ]);
     expect(c.setTabVisible(StudyTab.week, false), isTrue);
-    expect(c.enabledTabs.first, StudyTab.month);
+    expect(c.enabledTabs.first, StudyTab.todo);
     c.setTabVisible(StudyTab.week, true);
-    expect(c.tabOrder[2], StudyTab.week);
+    expect(c.tabOrder[3], StudyTab.week);
   });
 
   test(
@@ -55,7 +57,7 @@ void main() {
       addTearDown(repo.close);
       final c = StudyController(repo, watchClock: false);
       addTearDown(c.dispose);
-      c.reorderTab(4, 0);
+      c.reorderTab(5, 0);
       for (final tab in StudyTab.values.where((tab) => tab != StudyTab.month)) {
         expect(c.setTabVisible(tab, false), isTrue);
       }
@@ -273,6 +275,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('input-Research')), findsOneWidget);
         for (final tab in [
+          StudyTab.todo,
           StudyTab.journal,
           StudyTab.review,
           StudyTab.schedule,

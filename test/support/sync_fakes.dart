@@ -39,6 +39,11 @@ class FakeCloud implements SyncGateway {
     calls++;
     if (offline) throw const SocketException('offline');
     final incoming = clone(row)..['user_id'] = account;
+    if (table == 'todo_tasks') {
+      final parent = tables['todo_topics']![incoming['topic_id']];
+      if (parent == null) throw StateError('Missing topic');
+      incoming['deleted_at'] ??= parent['deleted_at'];
+    }
     if (table == 'weekly_goals' || table == 'reviews') {
       final existing = tables[table]!.values
           .where(
@@ -56,7 +61,7 @@ class FakeCloud implements SyncGateway {
     final eh = existing == null ? <String, int>{} : historyOf(existing);
     final incomingCovers = coversHistory(ih, eh);
     final existingCovers = coversHistory(eh, ih);
-    final winner =
+    var winner =
         existing == null ||
         (incomingCovers && !existingCovers) ||
         (incomingCovers == existingCovers &&
@@ -67,6 +72,11 @@ class FakeCloud implements SyncGateway {
                           existing['sync_writer'] as String,
                         ) >
                         0)));
+    if (existing != null &&
+        table.startsWith('todo_') &&
+        (incoming['deleted_at'] != null) != (existing['deleted_at'] != null)) {
+      winner = incoming['deleted_at'] != null;
+    }
     if (existing != null &&
         !incomingCovers &&
         !existingCovers &&
@@ -83,7 +93,7 @@ class FakeCloud implements SyncGateway {
       }
       tables[table]![id] = incoming;
     } else {
-      existing['sync_history'] = incoming['sync_history'];
+      existing!['sync_history'] = incoming['sync_history'];
     }
     duringUpload?.call(table, row);
     if (loseResponseFor == table) {

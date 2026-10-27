@@ -21,6 +21,7 @@ import '../test/support/sync_fakes.dart';
 import '../test/support/tab_reordering.dart';
 import '../test/support/settings_acceptance.dart';
 import '../test/support/android_drawer_acceptance.dart';
+import '../test/support/todo_acceptance.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -249,9 +250,16 @@ void main() {
         expect(cloud.conflicts, isEmpty);
         await exerciseAndroidDrawer(tester);
         await exerciseCategorySettings(tester, touch: true);
+        await exerciseTodo(tester, touch: true);
         await tester.pump(const Duration(seconds: 3));
         await sync.sync(manual: true);
         await exerciseTabReordering(tester, touch: true);
+        await syncWindows();
+        expect(windows.todoTopics().single.title, 'Native Research');
+        expect(
+          windows.todoTasks(windows.todoTopics().single.id).first.completed,
+          isTrue,
+        );
         expect(phoneStore.pending, 0);
         expect(windows.preference('tab.order', ''), '');
         await tester.pumpWidget(const SizedBox());
@@ -263,8 +271,12 @@ void main() {
         expect(SyncStore(phone.database).meta('account'), account);
         expect(phone.journal('').single.answer, 'Phone answer');
         expect(
+          phone.todoTasks(phone.todoTopics().single.id).map((t) => t.text),
+          ['Native A', 'Native B', 'Native C'],
+        );
+        expect(
           phone.preference('tab.order', ''),
-          '["month","week","journal","review","schedule"]',
+          '["month","week","todo","journal","review","schedule"]',
         );
         expect(
           phone.academicEvents(DateTime(2026, 10)).single.title,

@@ -5,6 +5,7 @@ import '../domain/models.dart';
 import '../domain/repository.dart';
 import '../domain/week.dart';
 import '../domain/planning.dart';
+import '../domain/todo.dart';
 import 'database.dart';
 
 class LocalStudyRepository implements StudyRepository {
@@ -440,6 +441,188 @@ class LocalStudyRepository implements StudyRepository {
   );
 
   @override
+  List<TodoTopic> todoTopics() => db
+      .select(
+        'SELECT * FROM todo_topics WHERE deleted_at IS NULL ORDER BY position,id',
+      )
+      .map(TodoTopic.fromMap)
+      .toList();
+
+  @override
+  List<TodoTask> todoTasks(String topicId) => db
+      .select(
+        '''SELECT t.* FROM todo_tasks t JOIN todo_topics p ON p.id=t.topic_id
+    WHERE t.topic_id=? AND t.deleted_at IS NULL AND p.deleted_at IS NULL
+    ORDER BY t.position,t.id''',
+        [topicId],
+      )
+      .map(TodoTask.fromMap)
+      .toList();
+
+  void _requireTodoTopic(String id) {
+    if (db.select(
+      'SELECT id FROM todo_topics WHERE id=? AND deleted_at IS NULL',
+      [id],
+    ).isEmpty) {
+      throw const FormatException('This topic is no longer available.');
+    }
+  }
+
+  TodoTask _requireTodoTask(String id) {
+    final rows = db.select(
+      '''SELECT t.* FROM todo_tasks t JOIN todo_topics p ON p.id=t.topic_id
+      WHERE t.id=? AND t.deleted_at IS NULL AND p.deleted_at IS NULL''',
+      [id],
+    );
+    if (rows.isEmpty) {
+      throw const FormatException('This task is no longer available.');
+    }
+    return TodoTask.fromMap(rows.single);
+  }
+
+  int _nextTodoPosition(String topicId) =>
+      db.select(
+            'SELECT COALESCE(MAX(position),-1)+1 n FROM todo_tasks WHERE topic_id=? AND deleted_at IS NULL',
+            [topicId],
+          ).single['n']
+          as int;
+
+  @override
+  String addTodoTopic(String title) {
+    final text = todoText(title), id = _uuid.v4(), stamp = now;
+    database.transaction(
+      () => _insert('todo_topics', {
+        'id': id,
+        'title': text,
+        'position': db
+            .select('SELECT COALESCE(MAX(position),-1)+1 n FROM todo_topics')
+            .single['n'],
+        'created_at': stamp,
+        'updated_at': stamp,
+        'deleted_at': null,
+      }),
+    );
+    return id;
+  }
+
+  @override
+  void renameTodoTopic(String id, String title) {
+    final text = todoText(title);
+    _requireTodoTopic(id);
+    db.execute('UPDATE todo_topics SET title=?,updated_at=? WHERE id=?', [
+      text,
+      now,
+      id,
+    ]);
+  }
+
+  @override
+  void deleteTodoTopic(String id) => database.transaction(() {
+    final stamp = now;
+    db.execute(
+      'UPDATE todo_tasks SET deleted_at=?,updated_at=? WHERE topic_id=? AND deleted_at IS NULL',
+      [stamp, stamp, id],
+    );
+    db.execute(
+      'UPDATE todo_topics SET deleted_at=?,updated_at=? WHERE id=? AND deleted_at IS NULL',
+      [stamp, stamp, id],
+    );
+  });
+
+  @override
+  String addTodoTask(String topicId, String text) {
+    final value = todoText(text), id = _uuid.v4(), stamp = now;
+    database.transaction(() {
+      _requireTodoTopic(topicId);
+      _insert('todo_tasks', {
+        'id': id,
+        'topic_id': topicId,
+        'text': value,
+        'position': _nextTodoPosition(topicId),
+        'completed_at': null,
+        'created_at': stamp,
+        'updated_at': stamp,
+        'deleted_at': null,
+      });
+    });
+    return id;
+  }
+
+  @override
+  void editTodoTask(String id, String text) {
+    final value = todoText(text);
+    _requireTodoTask(id);
+    db.execute('UPDATE todo_tasks SET text=?,updated_at=? WHERE id=?', [
+      value,
+      now,
+      id,
+    ]);
+  }
+
+  @override
+  void deleteTodoTask(String id) => _deletePlanning('todo_tasks', id);
+
+  @override
+  void reorderTodoTasks(String topicId, List<String> ids) {
+    _requireTodoTopic(topicId);
+    final tasks = todoTasks(topicId);
+    final active = tasks.where((t) => !t.completed).map((t) => t.id).toSet();
+    if (ids.length != active.length ||
+        ids.toSet().length != ids.length ||
+        !active.containsAll(ids)) {
+      throw const FormatException('Tasks changed. Try dragging again.');
+    }
+    database.transaction(() {
+      final stamp = now;
+      var activeIndex = 0;
+      // Keep completed slots while normalizing ties from concurrent creation
+      for (var i = 0; i < tasks.length; i++) {
+        final id = tasks[i].completed ? tasks[i].id : ids[activeIndex++];
+        db.execute(
+          'UPDATE todo_tasks SET position=?,updated_at=? WHERE id=? AND position<>?',
+          [i, stamp, id, i],
+        );
+      }
+    });
+  }
+
+  @override
+  void completeTodoTask(String id) {
+    final task = _requireTodoTask(id);
+    if (task.completed) return;
+    final stamp = now;
+    db.execute('UPDATE todo_tasks SET completed_at=?,updated_at=? WHERE id=?', [
+      stamp,
+      stamp,
+      id,
+    ]);
+  }
+
+  @override
+  void restoreTodoTask(
+    String id, {
+    String? undoCompletion,
+  }) => database.transaction(() {
+    final task = _requireTodoTask(id);
+    if (!task.completed) return;
+    if (undoCompletion != null && task.completedAt != undoCompletion) {
+      throw const FormatException(
+        'This completion changed on another device. Reopen the task.',
+      );
+    }
+    db.execute(
+      'UPDATE todo_tasks SET completed_at=NULL,position=?,updated_at=? WHERE id=?',
+      [
+        undoCompletion == null
+            ? _nextTodoPosition(task.topicId)
+            : task.position,
+        now,
+        id,
+      ],
+    );
+  });
+
+  @override
   void setPreference(String key, String value) => db.execute(
     'INSERT INTO preferences(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
     [key, value],
@@ -452,12 +635,14 @@ class LocalStudyRepository implements StudyRepository {
     'reviews',
     'schedule_blocks',
     'academic_events',
+    'todo_topics',
+    'todo_tasks',
     'preferences',
   ];
   @override
   String exportJson() => const JsonEncoder.withIndent('  ').convert({
     'format': 'trackstudy',
-    'version': 4,
+    'version': 5,
     'exported_at': now,
     'tables': {
       for (final table in tables)
@@ -479,13 +664,16 @@ class LocalStudyRepository implements StudyRepository {
     try {
       final decoded = jsonDecode(data) as Map<String, dynamic>;
       if (decoded['format'] != 'trackstudy' ||
-          ![2, 3, 4].contains(decoded['version'])) {
+          ![2, 3, 4, 5].contains(decoded['version'])) {
         throw const FormatException('Unsupported backup format/version');
       }
       final rows = decoded['tables'] as Map<String, dynamic>;
       final legacy = decoded['version'] == 2;
       candidate.database.transaction(() {
         for (final table in tables) {
+          if ((decoded['version'] as int) < 5 && table.startsWith('todo_')) {
+            continue;
+          }
           if (legacy &&
               ['schedule_blocks', 'academic_events'].contains(table)) {
             continue;
@@ -509,7 +697,7 @@ class LocalStudyRepository implements StudyRepository {
                 !columns.containsAll(row.keys)) {
               throw const FormatException('Invalid backup columns');
             }
-            for (final key in ['id', 'category_id', 'goal_id']) {
+            for (final key in ['id', 'category_id', 'goal_id', 'topic_id']) {
               if (row.containsKey(key) &&
                   !Uuid.isValidUUID(fromString: row[key] as String)) {
                 throw const FormatException('Invalid record identifier');
@@ -522,6 +710,7 @@ class LocalStudyRepository implements StudyRepository {
               'archived_at',
               'deleted_at',
               'answered_at',
+              'completed_at',
             ]) {
               if (row[key] != null &&
                   DateTime.tryParse(row[key] as String) == null) {
@@ -562,6 +751,11 @@ class LocalStudyRepository implements StudyRepository {
             if (table == 'academic_events') {
               AcademicEvent.fromMap(row).validate();
             }
+            if (table.startsWith('todo_')) {
+              todoText(
+                row[table == 'todo_topics' ? 'title' : 'text'] as String,
+              );
+            }
             if (table == 'preferences' &&
                 (row['key'] as String).startsWith('windows.')) {
               continue;
@@ -587,10 +781,56 @@ class LocalStudyRepository implements StudyRepository {
             .map((r) => Map<String, Object?>.from(r))
             .toList();
         for (final table in tables.reversed) {
+          if (table.startsWith('todo_')) continue;
           if (['schedule_blocks', 'academic_events'].contains(table)) continue;
           db.execute('DELETE FROM $table');
         }
+        final todoIds = <String, String>{};
         for (final table in tables) {
+          if (table.startsWith('todo_')) {
+            if ((decoded['version'] as int) < 5) continue;
+            final restored = candidate.db.select('SELECT * FROM $table');
+            final ids = restored.map((r) => r['id']).toSet();
+            for (final row in db.select(
+              'SELECT id FROM $table WHERE deleted_at IS NULL',
+            )) {
+              if (!ids.contains(row['id'])) {
+                _deletePlanning(table, row['id'] as String);
+              }
+            }
+            for (final row in restored) {
+              final data = Map<String, Object?>.from(row)..['updated_at'] = now;
+              final old = db.select(
+                'SELECT deleted_at FROM $table WHERE id=?',
+                [data['id']],
+              );
+              final movedParent =
+                  table == 'todo_tasks' &&
+                  todoIds.containsKey(data['topic_id']);
+              // An explicit backup recovery creates new identities for deleted data
+              if (movedParent ||
+                  (data['deleted_at'] == null &&
+                      old.isNotEmpty &&
+                      old.single['deleted_at'] != null)) {
+                final previous = data['id'] as String;
+                data['id'] = todoIds[previous] = _uuid.v4();
+              }
+              if (table == 'todo_tasks') {
+                data['topic_id'] =
+                    todoIds[data['topic_id']] ?? data['topic_id'];
+                final parent = db.select(
+                  'SELECT deleted_at FROM todo_topics WHERE id=?',
+                  [data['topic_id']],
+                ).single;
+                data['deleted_at'] ??= parent['deleted_at'];
+              }
+              db.execute(
+                'INSERT INTO $table (${data.keys.join(',')}) VALUES (${List.filled(data.length, '?').join(',')}) ON CONFLICT(id) DO UPDATE SET ${data.keys.where((k) => k != 'id' && k != 'created_at').map((k) => '$k=excluded.$k').join(',')}',
+                data.values.toList(),
+              );
+            }
+            continue;
+          }
           if (['schedule_blocks', 'academic_events'].contains(table)) {
             if (legacy) {
               continue; // Old backups cannot erase data they never contained.

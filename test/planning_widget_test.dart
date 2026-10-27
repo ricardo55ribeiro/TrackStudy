@@ -64,6 +64,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('weekday-2')));
       await pumpSchedule(tester);
       expect(find.text('No schedule blocks for Tuesday.'), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const ValueKey('tab-month')));
       await tester.tap(find.byKey(const ValueKey('tab-month')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Add event').first);

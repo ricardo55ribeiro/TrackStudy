@@ -1,6 +1,7 @@
 import 'models.dart';
 import 'week.dart';
 import 'planning.dart';
+import 'todo.dart';
 
 abstract interface class StudyRepository {
   String get location;
@@ -28,6 +29,17 @@ abstract interface class StudyRepository {
   List<AcademicEvent> academicEvents(DateTime month);
   void saveAcademicEvent(AcademicEvent event);
   void deleteAcademicEvent(String id);
+  List<TodoTopic> todoTopics();
+  List<TodoTask> todoTasks(String topicId);
+  String addTodoTopic(String title);
+  void renameTodoTopic(String id, String title);
+  void deleteTodoTopic(String id);
+  String addTodoTask(String topicId, String text);
+  void editTodoTask(String id, String text);
+  void deleteTodoTask(String id);
+  void reorderTodoTasks(String topicId, List<String> ids);
+  void completeTodoTask(String id);
+  void restoreTodoTask(String id, {String? undoCompletion});
   String preference(String key, String fallback);
   void setPreference(String key, String value);
   String exportJson();

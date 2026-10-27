@@ -8,6 +8,7 @@ A local-first weekly tracking app for Windows and Android. Record study hours an
 
 - Weekly category goals with minimums, targets, progress bars, and an auditable entry history.
 - Research Journal with Learned, Question, Next, and saved answers.
+- To-Do List with topics, task drag reordering, a five-second completion grace period and collapsible finished tasks.
 - Weekly Review with scores derived from tracking and automatically saved drafts.
 - Recurring weekday schedules with descriptions, plus a monthly academic calendar.
 - Dark/light themes and device-local tab visibility and drag reordering.
@@ -18,6 +19,8 @@ Type an amount and press **Enter** or **+**. Inputs start empty and clear after 
 In **Settings → Tabs on this device**, drag a handle to reorder any tab, including **Progress Bars**. Hold the handle first on Android. Hidden tabs retain their position and data, at least one tab stays enabled and startup opens the first enabled tab. These preferences are not synchronized.
 
 Categories use the same drag handles and their order synchronizes across devices. Archived categories stay in a collapsed **Archived Categories** section with a restore control. Hiding Progress Bars also hides category management in Settings while preserving all tracking data.
+
+**To-Do List** defaults immediately after Progress Bars, including when upgrading a customized order. Add topics with the bottom button and tasks from the right of each topic header. Click or tap a topic title or task text to open its existing edit or delete menu. Drag active task text directly on Windows or hold and drag on Android. Check a task to save completion immediately while retaining it in place for five seconds to allow undo. Finished tasks expand independently per topic, sort by newest completion and return to the end of the active list when unchecked. See the [1.4.0 release and migration instructions](docs/TODO_LIST_RELEASE.md).
 
 ## Windows
 

@@ -187,6 +187,7 @@ List<SchedulePlacement> layoutSchedule(List<ScheduleBlock> blocks) {
 
 enum StudyTab {
   week,
+  todo,
   journal,
   review,
   schedule,
@@ -194,6 +195,7 @@ enum StudyTab {
 
   String get label => switch (this) {
     week => 'Progress Bars',
+    todo => 'To-Do List',
     journal => 'Research Journal',
     review => 'Weekly Review',
     schedule => 'Daily Schedule',
@@ -221,10 +223,15 @@ abstract final class StudyTabOrder {
         if (tab.name == id) tabs.add(tab);
       }
     }
-    return List.unmodifiable({
+    final order = <StudyTab>{
       if (!tabs.contains(StudyTab.week)) StudyTab.week,
       ...tabs,
       ...StudyTab.values,
-    });
+    }.toList();
+    if (!tabs.contains(StudyTab.todo)) {
+      order.remove(StudyTab.todo);
+      order.insert(order.indexOf(StudyTab.week) + 1, StudyTab.todo);
+    }
+    return List.unmodifiable(order);
   }
 }

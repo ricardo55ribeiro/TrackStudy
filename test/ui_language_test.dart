@@ -6,6 +6,7 @@ void main() {
   test('navigation labels use the requested names on every platform', () {
     expect(StudyTab.values.map((tab) => tab.label), [
       'Progress Bars',
+      'To-Do List',
       'Research Journal',
       'Weekly Review',
       'Daily Schedule',

@@ -23,7 +23,7 @@ try {
     grant execute on function auth.uid() to authenticated, anon;
   `);
   await db.query('insert into auth.users values ($1),($2)',[a,b]);
-  for (const file of ['001_initial.sql','002_sync.sql','003_causal_sync.sql','004_schedule_and_events.sql','005_journal_answers_schedule_description.sql']) {
+  for (const file of ['001_initial.sql','002_sync.sql','003_causal_sync.sql','004_schedule_and_events.sql','005_journal_answers_schedule_description.sql','006_todo_list.sql']) {
     const legacyJournal=randomUUID(), legacyBlock=randomUUID();
     if(file.startsWith('005')) {
       await db.query("insert into public.journal(id,user_id,learned,question,next,experiment) values ($1,$2,'Existing','Why?','Next','{}')",[legacyJournal,a]);
@@ -193,7 +193,38 @@ try {
   check((await merge('schedule_blocks',clearedDescription)).revision===clearedDescription.revision,'Description clearing is idempotent');
   await rejects(()=>merge('schedule_blocks',{...described,id:randomUUID(),description:'x'.repeat(2001)}),'Overlong description rejected');
   // Public-readiness audit: exercise every private table, not just categories.
-  const privateTables=['categories','weekly_goals','entries','journal','reviews','sync_conflicts','schedule_blocks','academic_events'];
+  const topic = await merge('todo_topics',{...stamp,id:randomUUID(),title:'Investigação',position:0,deleted_at:null,user_id:b});
+  check(topic.user_id===a,'Topic ownership is assigned by the authenticated session');
+  const task = await merge('todo_tasks',{...stamp,id:randomUUID(),topic_id:topic.id,text:'Ler Capítulo 5',position:0,completed_at:null,deleted_at:null});
+  check((await merge('todo_tasks',task)).revision===task.revision,'Task retry is idempotent');
+  const ordered = await merge('todo_tasks',{...task,sync_version:2,sync_writer:'phone',position:3,text:'Edited task'});
+  check(ordered.position===3 && ordered.text==='Edited task','Task order and edits synchronize');
+  const completed = await merge('todo_tasks',{...ordered,sync_version:3,completed_at:'2026-10-26T11:00:00Z'});
+  check(completed.completed_at!==null,'Completion timestamp persists');
+  const restored = await merge('todo_tasks',{...completed,sync_version:4,completed_at:null,position:4});
+  check(restored.completed_at===null && restored.position===4,'Restoration preserves identity and updates position');
+  const deleted = await merge('todo_tasks',{...restored,sync_version:5,deleted_at:'2026-10-26T12:00:00Z'});
+  const lateEdit = await merge('todo_tasks',{...task,sync_version:10000,sync_writer:'offline-device',text:'Stale offline edit'});
+  check(lateEdit.deleted_at!==null,'Permanent task deletion wins against higher concurrent counters');
+  check((await merge('todo_tasks',deleted)).deleted_at!==null,'Deleted task retry remains deleted');
+  await rejects(()=>db.query('update public.todo_tasks set deleted_at=null where id=$1',[task.id]),'Direct update cannot clear a task tombstone');
+  const secondTopic = await merge('todo_topics',{...topic,id:randomUUID(),title:'Second topic'});
+  await rejects(()=>merge('todo_tasks',{...task,sync_version:10001,topic_id:secondTopic.id,deleted_at:'2026-10-26T12:00:00Z'}),'A task cannot move to another topic');
+  const deletedTopic = await merge('todo_topics',{...topic,sync_version:2,deleted_at:'2026-10-26T12:00:00Z'});
+  check((await merge('todo_topics',{...topic,sync_version:20000,sync_writer:'offline-device',title:'Old topic edit'})).deleted_at!==null,'Deleted topic cannot be resurrected');
+  const lateChild = await merge('todo_tasks',{...task,id:randomUUID(),text:'Created offline after parent deletion'});
+  check(lateChild.deleted_at===deletedTopic.deleted_at,'Late child creation inherits parent tombstone');
+  await rejects(()=>merge('todo_topics',{...topic,id:randomUUID(),title:' '}),'Empty topic title rejected');
+  await rejects(()=>merge('todo_tasks',{...task,id:randomUUID(),text:' '}),'Empty task text rejected');
+  await rejects(()=>merge('todo_tasks',{...task,id:randomUUID(),position:-1}),'Invalid ordering value rejected');
+  await rejects(()=>merge('todo_tasks',{...task,id:randomUUID(),topic_id:randomUUID()}),'Missing topic rejected');
+  await asUser(b);
+  await rejects(()=>merge('todo_tasks',{...task,id:randomUUID()}),'Cross-owner parent reference rejected');
+  await asUser(a);
+  for (const table of ['todo_topics','todo_tasks']) {
+    await rejects(()=>db.exec(`delete from public.${table}`),`${table}: physical deletion denied`);
+  }
+  const privateTables=['categories','weekly_goals','entries','journal','reviews','sync_conflicts','schedule_blocks','academic_events','todo_topics','todo_tasks'];
   const privateRows={};
   for(const table of privateTables) {
     privateRows[table]=(await db.query(`select to_jsonb(t) r from public.${table} t limit 1`)).rows[0].r;
@@ -205,7 +236,7 @@ try {
   check(functions.every(f=>f.proconfig?.includes('search_path=""')),'All TrackStudy functions use an empty search path');
   await asUser(b);
   check(await archiveCopy(currentEntry,100,currentEntry.sync_writer)===false,'Another account cannot archive this entry copy');
-  for (const table of ['categories','weekly_goals','entries','journal','reviews','sync_conflicts','schedule_blocks','academic_events']) {
+  for (const table of privateTables) {
     check((await db.query(`select count(*)::int n from public.${table}`)).rows[0].n === 0,`RLS hides another account's ${table}`);
   }
   for(const [table,row] of Object.entries(planning)) {
@@ -241,5 +272,5 @@ try {
     await rejects(()=>db.query(`update public.${table} set user_id=$1`,[b]),`${table}: anonymous update denied`);
     await rejects(()=>db.exec(`delete from public.${table}`),`${table}: anonymous delete denied`);
   }
-  console.log(`PASS: all five migrations executed; ${checks} PostgreSQL merge, idempotency, ownership, RLS, tombstone and conflict checks passed.`);
+  console.log(`PASS: all six migrations executed; ${checks} PostgreSQL merge, idempotency, ownership, RLS, tombstone and conflict checks passed.`);
 } finally { await db.close(); }

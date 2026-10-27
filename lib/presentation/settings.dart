@@ -162,7 +162,7 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Export includes categories, weeks, undone entries, journal entries, reviews, schedules, academic events and local preferences. Windows startup and background settings stay on this device. Restoring creates a safety backup first.',
+                      'Export includes categories, weeks, undone entries, journal entries, reviews, schedules, academic events, to-do topics, tasks and local preferences. Windows startup and background settings stay on this device. Restoring creates a safety backup first.',
                     ),
                     const SectionTitle('Sync'),
                     const SyncSettings(),
@@ -357,7 +357,7 @@ class SettingsScreen extends ConsumerWidget {
           !await confirm(
             context,
             'Restore this backup?',
-            'This replaces local data with the selected backup. A safety copy of your current data will be saved beside the database.',
+            'This replaces local data with the selected backup. Backups containing to-do data also delete topics and tasks absent from that backup on your synced devices. Older backups leave to-do data unchanged. A safety copy of your current data will be saved beside the database.',
             action: 'Restore',
           )) {
         return;

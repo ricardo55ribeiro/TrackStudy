@@ -9,7 +9,7 @@ class StudyDatabase {
     handle.execute('PRAGMA synchronous = FULL');
     migrate();
   }
-  static const version = 6;
+  static const version = 7;
   void transaction(void Function() action) {
     handle.execute('BEGIN IMMEDIATE');
     try {
@@ -192,6 +192,50 @@ ALTER TABLE journal ADD COLUMN answer TEXT;
 ALTER TABLE journal ADD COLUMN answered_at TEXT;
 ALTER TABLE schedule_blocks ADD COLUMN description TEXT CHECK(description IS NULL OR length(description)<=2000);
 ''');
+      }
+      if (old < 7) {
+        handle.execute('''
+CREATE TABLE todo_topics (
+ id TEXT PRIMARY KEY, title TEXT NOT NULL CHECK(length(trim(title))>0),
+ position INTEGER NOT NULL CHECK(typeof(position)='integer' AND position>=0),
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT
+);
+CREATE TABLE todo_tasks (
+ id TEXT PRIMARY KEY, topic_id TEXT NOT NULL REFERENCES todo_topics(id),
+ text TEXT NOT NULL CHECK(length(trim(text))>0),
+ position INTEGER NOT NULL CHECK(typeof(position)='integer' AND position>=0),
+ completed_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT
+);
+CREATE INDEX todo_topics_order ON todo_topics(position,id);
+CREATE INDEX todo_tasks_order ON todo_tasks(topic_id,position,id);
+CREATE INDEX todo_tasks_finished ON todo_tasks(topic_id,completed_at DESC,id);
+CREATE TRIGGER todo_task_parent BEFORE UPDATE OF topic_id ON todo_tasks
+WHEN NEW.topic_id<>OLD.topic_id
+BEGIN SELECT RAISE(ABORT,'A task cannot change topic'); END;
+''');
+        for (final table in ['todo_topics', 'todo_tasks']) {
+          handle.execute('''
+CREATE TRIGGER ${table}_keep_deleted BEFORE UPDATE ON $table
+WHEN OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL
+BEGIN SELECT RAISE(ABORT,'Deleted to-do records cannot be restored with the same ID'); END;
+''');
+          for (final event in ['INSERT', 'UPDATE']) {
+            handle.execute('''
+CREATE TRIGGER sync_${table}_${event.toLowerCase()} AFTER $event ON $table
+WHEN (SELECT value FROM sync_meta WHERE key='applying')='0'
+BEGIN
+ UPDATE sync_meta SET value=CAST(value AS INTEGER)+1 WHERE key='clock';
+ INSERT INTO sync_records (table_name,record_id,version,writer,dirty,history)
+ VALUES ('$table',NEW.id,(SELECT CAST(value AS INTEGER) FROM sync_meta WHERE key='clock'),(SELECT value FROM sync_meta WHERE key='device'),1,
+ json_object((SELECT value FROM sync_meta WHERE key='device'),(SELECT CAST(value AS INTEGER) FROM sync_meta WHERE key='clock')))
+ ON CONFLICT(table_name,record_id) DO UPDATE SET
+ history=json_set(json_set(sync_records.history,'\$.'||json_quote(sync_records.writer),sync_records.version),'\$.'||json_quote(excluded.writer),excluded.version),
+ version=excluded.version,writer=excluded.writer,dirty=1;
+ UPDATE sync_meta SET value='0' WHERE key='pristine_seed';
+END;
+''');
+          }
+        }
       }
       handle.execute('PRAGMA user_version = $version');
     });

@@ -206,7 +206,7 @@ void main() {
         }
       }
       raw.execute(
-        'DROP TABLE schedule_blocks; DROP TABLE academic_events; ALTER TABLE journal DROP COLUMN answer; ALTER TABLE journal DROP COLUMN answered_at; ALTER TABLE sync_records DROP COLUMN history; ALTER TABLE sync_conflicts DROP COLUMN archived_at; PRAGMA user_version=3',
+        'DROP TABLE todo_tasks; DROP TABLE todo_topics; DROP TABLE schedule_blocks; DROP TABLE academic_events; ALTER TABLE journal DROP COLUMN answer; ALTER TABLE journal DROP COLUMN answered_at; ALTER TABLE sync_records DROP COLUMN history; ALTER TABLE sync_conflicts DROP COLUMN archived_at; PRAGMA user_version=3',
       );
       StudyDatabase(raw);
       expect(

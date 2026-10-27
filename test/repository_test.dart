@@ -317,7 +317,7 @@ void main() {
       'DROP TABLE sync_records; DROP TABLE sync_meta; DROP TABLE sync_conflicts;',
     );
     raw.execute(
-      'DROP TABLE schedule_blocks; DROP TABLE academic_events; ALTER TABLE journal DROP COLUMN answer; ALTER TABLE journal DROP COLUMN answered_at; DROP INDEX entries_goal_active; DROP INDEX goals_week; DROP INDEX journal_date; PRAGMA user_version=1',
+      'DROP TABLE todo_tasks; DROP TABLE todo_topics; DROP TABLE schedule_blocks; DROP TABLE academic_events; ALTER TABLE journal DROP COLUMN answer; ALTER TABLE journal DROP COLUMN answered_at; DROP INDEX entries_goal_active; DROP INDEX goals_week; DROP INDEX journal_date; PRAGMA user_version=1',
     );
     final migrated = StudyDatabase(raw);
     expect(

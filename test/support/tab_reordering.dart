@@ -58,6 +58,7 @@ Future<void> exerciseTabReordering(
   expect(c.tabOrder, [
     StudyTab.month,
     StudyTab.week,
+    StudyTab.todo,
     StudyTab.journal,
     StudyTab.review,
     StudyTab.schedule,
@@ -78,7 +79,7 @@ Future<void> exerciseTabReordering(
   await progressDrag.up();
   await tester.pumpAndSettle();
   expect(c.tabOrder.last, StudyTab.week);
-  c.reorderTab(4, 1);
+  c.reorderTab(5, 1);
   await tester.pumpAndSettle();
   await tester.pageBack();
   await tester.pumpAndSettle();

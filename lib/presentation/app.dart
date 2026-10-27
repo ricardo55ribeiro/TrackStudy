@@ -13,6 +13,7 @@ import '../domain/planning.dart';
 import 'schedule.dart';
 import 'monthly.dart';
 import 'android_navigation.dart';
+import 'todo.dart';
 
 class TrackStudyApp extends ConsumerWidget {
   const TrackStudyApp({super.key});
@@ -272,6 +273,10 @@ class _StudyShellState extends ConsumerState<StudyShell> {
                       for (final tab in StudyTab.values)
                         switch (tab) {
                           StudyTab.week => const Dashboard(),
+                          StudyTab.todo =>
+                            page == StudyTab.todo
+                                ? const TodoScreen()
+                                : const SizedBox(),
                           StudyTab.journal => const JournalScreen(),
                           StudyTab.review => ReviewScreen(
                             key: ValueKey(
