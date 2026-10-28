@@ -23,13 +23,29 @@ try {
     grant execute on function auth.uid() to authenticated, anon;
   `);
   await db.query('insert into auth.users values ($1),($2)',[a,b]);
-  for (const file of ['001_initial.sql','002_sync.sql','003_causal_sync.sql','004_schedule_and_events.sql','005_journal_answers_schedule_description.sql','006_todo_list.sql']) {
+  for (const file of ['001_initial.sql','002_sync.sql','003_causal_sync.sql','004_schedule_and_events.sql','005_journal_answers_schedule_description.sql','006_todo_list.sql','007_progress_bar_archiving.sql']) {
     const legacyJournal=randomUUID(), legacyBlock=randomUUID();
     if(file.startsWith('005')) {
       await db.query("insert into public.journal(id,user_id,learned,question,next,experiment) values ($1,$2,'Existing','Why?','Next','{}')",[legacyJournal,a]);
       await db.query("insert into public.schedule_blocks(id,user_id,title,weekday,start_minute,end_minute) values ($1,$2,'Existing class',1,510,600)",[legacyBlock,a]);
     }
+    let legacyBefore;
+    if(file.startsWith('007')) {
+      await db.query("insert into public.categories(id,user_id,name,measurement,unit,floor,target,increment,step,position,active) values ($1,$2,'Legacy disabled','continuous','h',0,100,100,25,0,false)",[legacyJournal,a]);
+      await db.query("insert into public.weekly_goals(id,user_id,category_id,week_start,name,measurement,unit,floor,target,increment,step,position) values ($1,$2,$3,'2026-09-21','Legacy disabled','continuous','h',0,100,100,25,0)",[legacyBlock,a,legacyJournal]);
+      await db.query("insert into public.entries(id,user_id,goal_id,amount) values ($1,$2,$3,150)",[randomUUID(),a,legacyBlock]);
+      legacyBefore=(await db.query('select to_jsonb(c) r from public.categories c where id=$1',[legacyJournal])).rows[0].r;
+    }
     await db.exec(await readFile(new URL(`../supabase/migrations/${file}`,import.meta.url),'utf8'));
+    if(file.startsWith('007')) {
+      const after=(await db.query('select to_jsonb(c) r from public.categories c where id=$1',[legacyJournal])).rows[0].r;
+      check(JSON.stringify(after)===JSON.stringify(legacyBefore),'007 leaves preexisting category timestamps, flags and sync metadata unchanged');
+      check((await db.query('select amount from public.entries where goal_id=$1',[legacyBlock])).rows[0].amount===150,'007 preserves an existing ledger entry');
+      check((await db.query('select count(*)::int n from public.category_states')).rows[0].n===0,'007 does not invent legacy history or timezone boundaries');
+      await db.query('delete from public.entries where goal_id=$1',[legacyBlock]);
+      await db.query('delete from public.weekly_goals where id=$1',[legacyBlock]);
+      await db.query('delete from public.categories where id=$1',[legacyJournal]);
+    }
     if(file.startsWith('005')) {
       const j=(await db.query('select * from public.journal where id=$1',[legacyJournal])).rows[0];
       const b=(await db.query('select * from public.schedule_blocks where id=$1',[legacyBlock])).rows[0];
@@ -224,7 +240,59 @@ try {
   for (const table of ['todo_topics','todo_tasks']) {
     await rejects(()=>db.exec(`delete from public.${table}`),`${table}: physical deletion denied`);
   }
-  const privateTables=['categories','weekly_goals','entries','journal','reviews','sync_conflicts','schedule_blocks','academic_events','todo_topics','todo_tasks'];
+  const lifecycleId = randomUUID();
+  const lifecycle = await merge('category_states',{
+    ...stamp,id:lifecycleId,category_id:category.id,week_start:'2026-09-21',
+    included:true,is_baseline:true,changed_at:stamp.created_at
+  });
+  check(lifecycle.id===lifecycleId,'Lifecycle identity is independent of an existing weekly goal');
+  const duplicateLifecycle=await merge('category_states',{...lifecycle,id:randomUUID()});
+  check(duplicateLifecycle.id===lifecycle.id,'Concurrent lifecycle creation reconciles its own natural key');
+  const beforeArchive=(await db.query('select to_jsonb(e) r from public.entries e')).rows.map(r=>r.r);
+  const exclude=await merge('category_states',{
+    ...lifecycle,id:randomUUID(),week_start:'2026-09-28',included:false,is_baseline:false,
+    changed_at:'2026-09-30T12:00:00Z',sync_version:301,sync_writer:'archive-device'
+  });
+  check((await db.query('select active from public.categories where id=$1',[category.id])).rows[0].active===false,'Lifecycle archive updates the global category cache');
+  const lifecycleRestored=await merge('category_states',{
+    ...lifecycle,id:randomUUID(),week_start:'2026-10-12',included:true,is_baseline:false,
+    changed_at:'2026-10-15T12:00:00Z',sync_version:302,sync_writer:'restore-device'
+  });
+  await merge('weekly_goals',{...goal,id:randomUUID(),week_start:lifecycleRestored.week_start});
+  check((await merge('category_states',lifecycleRestored)).id===lifecycleRestored.id,'A goal arriving later cannot replace an existing lifecycle identity');
+  async function included(week) {
+    return (await db.query(`select coalesce((select included from public.category_states
+      where category_id=$1 and week_start<=$2::date order by is_baseline asc,
+      case when not is_baseline then week_start end desc,week_start asc,id limit 1),true) included`,[category.id,week])).rows[0].included;
+  }
+  for(const [week,value] of [['2026-09-21',true],['2026-09-28',false],['2026-10-05',false],['2026-10-12',true]]) {
+    check(await included(week)===value,`Four-week lifecycle: ${week} inclusion is ${value}`);
+  }
+  await merge('weekly_goals',{...goal,id:randomUUID(),week_start:'2026-10-05',sync_version:9999,sync_writer:'offline'});
+  check(await included('2026-10-05')===false,'Late offline goal cannot reintroduce an excluded historical bar');
+  await merge('category_states',{...lifecycle,id:randomUUID(),week_start:'2026-10-05',sync_version:10000,sync_writer:'late-upgrade'});
+  check(await included('2026-10-05')===false,'A later upgrade baseline cannot reactivate an archived period');
+  const sameWeekRestore=await merge('category_states',{...exclude,included:true,sync_version:10001,sync_writer:'restore-device'});
+  check(await included('2026-09-28')===true,'Same-week restore includes previously recorded progress');
+  const sameWeekArchive=await merge('category_states',{...sameWeekRestore,included:false,sync_version:10002});
+  check(await included('2026-09-28')===false,'Same-week final archive excludes the entire week');
+  await merge('category_states',{...lifecycle,id:sameWeekArchive.id,week_start:'2026-09-28',sync_version:20000});
+  check(await included('2026-09-28')===false,'Even a high-version upgrade baseline cannot override an explicit decision');
+  check((await db.query('select active from public.categories where id=$1',[category.id])).rows[0].active===true,'An earlier-week archive cannot overwrite a later-week global restore');
+  await merge('categories',{...savedCategory,sync_version:30000,active:false,archived_at:'2026-10-16T00:00:00Z'});
+  check((await db.query('select active from public.categories where id=$1',[category.id])).rows[0].active===true,'Stale global flags cannot diverge from authoritative lifecycle');
+  for(const reverse of [false,true]) {
+    const base={...lifecycleRestored,id:randomUUID(),week_start:reverse?'2026-11-02':'2026-10-26'};
+    const archiveRace={...base,included:false,sync_version:40000,sync_writer:'race-a',is_baseline:false};
+    const restoreRace={...base,included:true,sync_version:40000,sync_writer:'race-z',is_baseline:false};
+    for(const row of reverse?[restoreRace,archiveRace]:[archiveRace,restoreRace]) await merge('category_states',row);
+    check(await included(base.week_start)===true,`Concurrent archive/restore converges in upload order ${reverse}`);
+  }
+  check(JSON.stringify((await db.query('select to_jsonb(e) r from public.entries e')).rows.map(r=>r.r))===JSON.stringify(beforeArchive),'All archive/restore operations preserve ledger rows and undo timestamps exactly');
+  await rejects(()=>db.exec('delete from public.category_states'),'Lifecycle physical deletion denied');
+  await rejects(()=>merge('category_states',{...lifecycleRestored,id:randomUUID(),week_start:'2026-10-13'}),'Lifecycle rejects a non-Monday date');
+  await rejects(()=>db.query('update public.category_states set week_start=$1 where id=$2',['2026-12-07',lifecycleRestored.id]),'Existing lifecycle identity cannot move to another week');
+  const privateTables=['categories','weekly_goals','entries','journal','reviews','sync_conflicts','schedule_blocks','academic_events','todo_topics','todo_tasks','category_states'];
   const privateRows={};
   for(const table of privateTables) {
     privateRows[table]=(await db.query(`select to_jsonb(t) r from public.${table} t limit 1`)).rows[0].r;
@@ -246,6 +314,7 @@ try {
   check((await db.query('update public.categories set name=$1 where id=$2 returning id',['Intrusion',category.id])).rows.length === 0,'Cross-user updates are hidden by RLS');
   await rejects(() => merge('entries',{...entry,id:randomUUID()}),'Composite FK/entry validation must reject cross-user goal references');
   await rejects(() => merge('weekly_goals',{...goal,id:randomUUID(),week_start:'2026-10-12'}),'Composite FK rejects cross-user category references');
+  await rejects(() => merge('category_states',{...lifecycle,id:randomUUID(),week_start:'2026-12-07'}),'Lifecycle composite FK rejects cross-user category references');
   for (const table of privateTables) {
     const forged={...privateRows[table],id:randomUUID(),record_id:randomUUID(),user_id:a};
     await rejects(()=>db.query(`insert into public.${table} select * from jsonb_populate_record(null::public.${table},$1::jsonb)`,[JSON.stringify(forged)]),`${table}: direct insert cannot impersonate another owner`);
@@ -272,5 +341,5 @@ try {
     await rejects(()=>db.query(`update public.${table} set user_id=$1`,[b]),`${table}: anonymous update denied`);
     await rejects(()=>db.exec(`delete from public.${table}`),`${table}: anonymous delete denied`);
   }
-  console.log(`PASS: all six migrations executed; ${checks} PostgreSQL merge, idempotency, ownership, RLS, tombstone and conflict checks passed.`);
+  console.log(`PASS: all seven migrations executed; ${checks} PostgreSQL merge, idempotency, ownership, RLS, tombstone and conflict checks passed.`);
 } finally { await db.close(); }

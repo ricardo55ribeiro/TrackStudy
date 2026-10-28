@@ -12,8 +12,27 @@ On a new project, run these migrations in order through Supabase's SQL Editor:
 4. [004_schedule_and_events.sql](../supabase/migrations/004_schedule_and_events.sql)
 5. [005_journal_answers_schedule_description.sql](../supabase/migrations/005_journal_answers_schedule_description.sql)
 6. [006_todo_list.sql](../supabase/migrations/006_todo_list.sql)
+7. [007_progress_bar_archiving.sql](../supabase/migrations/007_progress_bar_archiving.sql)
 
-For an existing project, apply only missing migrations. Do not rerun applied migrations or remove existing tables. Version 1.4.0 requires all six for synchronization. Apply 006 before updating the apps when possible. Installing first is safe for local use, but synchronization waits until the schema is available. See [To-Do List release instructions](TODO_LIST_RELEASE.md) for the exact verification queries.
+For an existing project, apply only missing migrations. Do not rerun applied migrations or remove existing tables. Version 1.5.0 requires all seven for synchronization. Installing first is safe for local use, but synchronization waits until the schema is available.
+
+To apply the Progress Bars update, open the intended project's **SQL Editor**, confirm migrations 001 through 006 are already applied and create a new query. Paste the complete contents of `supabase/migrations/007_progress_bar_archiving.sql`, including `begin;` and `commit;`, and run it once. Then run the verification queries below and choose **Settings > Sync > Sync now** on both updated applications. Update both clients before using the new archive behavior: older applications do not understand weekly inclusion.
+
+```sql
+select relrowsecurity from pg_class
+where oid = 'public.category_states'::regclass;
+
+select policyname, cmd, roles from pg_policies
+where schemaname = 'public' and tablename = 'category_states';
+
+select to_regprocedure('public.trackstudy_category_state(uuid,uuid)'),
+       to_regprocedure('public.trackstudy_category_cache()'),
+       to_regprocedure('public.trackstudy_refresh_category_cache()');
+```
+
+Expect RLS enabled, authenticated SELECT/INSERT/UPDATE policies and three non-null function names. The migration preserves all existing records and adds no historical backfill. Clients initialize an upgrade-week baseline using their local calendar. Historical inclusion before that boundary remains based on existing goal snapshots because earlier archive/restore decisions are not recoverable.
+
+The `category_states` table stores one decision per category/week using the existing causal histories and deterministic version/writer conflict resolution. Explicit archive/restore decisions override automatic upgrade baselines. The latest explicit decision at or before a week controls inclusion until the next decision, even when no goal exists or an offline client uploads a late goal. Both SQLite and PostgreSQL derive the legacy category flags from the same lifecycle ordering, preventing independent category edits from undoing weekly decisions. Goals, entries and manually written reviews are retained.
 
 Enable email/password authentication and create your user in Supabase Authentication. For a manually created personal account, confirm the user as part of that setup. TrackStudy has no registration screen; public sign-ups can be disabled for a personal project. See Supabase's [password authentication documentation](https://supabase.com/docs/guides/auth/passwords).
 
@@ -32,7 +51,7 @@ Open **Settings → Sync → Sign in**. On a new device, sign in before entering
 
 ## Privacy and behavior
 
-- All ten private tables enforce per-user RLS. The merge RPC runs with the caller's privileges and authenticated ownership; cross-account references are constrained. Keep these protections enabled even though the publishable client key is public.
+- All eleven private tables enforce per-user RLS. The merge RPC runs with the caller's privileges and authenticated ownership; cross-account references are constrained. Keep these protections enabled even though the publishable client key is public.
 - Records save to SQLite immediately. Pending edits survive restarts and retry after network failures. Changes merge by UUID and causal history; genuine concurrent conflicts retain recovery copies. Repeated synchronization does not create a new entry for an existing UUID.
 - Local data binds to its account/project. Sign-out removes the saved session but retains local records and pending changes. Use a separate OS profile/device for a separate account.
 - Session credentials use platform secure storage. SQLite databases and JSON backups are not encrypted; keep them private. Backups do not contain authentication tokens.

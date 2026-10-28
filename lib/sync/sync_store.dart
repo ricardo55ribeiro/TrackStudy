@@ -1,5 +1,6 @@
 import 'dart:convert';
 import '../data/database.dart';
+import '../data/category_lifecycle.dart';
 import '../domain/models.dart';
 import '../domain/week.dart';
 import '../domain/planning.dart';
@@ -120,6 +121,10 @@ class SyncStore {
 
   SyncRow _wire(String table, SyncRow row) {
     if (table == 'categories') row['active'] = row['active'] == 1;
+    if (table == 'category_states') {
+      row['included'] = row['included'] == 1;
+      row['is_baseline'] = row['is_baseline'] == 1;
+    }
     for (final field in ['experiment', 'content', 'sync_history']) {
       if (row.containsKey(field)) row[field] = jsonDecode(row[field] as String);
     }
@@ -177,7 +182,7 @@ class SyncStore {
           }
         }
         database.handle.execute(
-          'DELETE FROM weekly_goals; DELETE FROM categories; DELETE FROM sync_records;',
+          'DELETE FROM weekly_goals; DELETE FROM category_states; DELETE FROM categories; DELETE FROM sync_records;',
         );
       }
       for (final table in syncTables) {
@@ -185,6 +190,7 @@ class SyncStore {
           _applyRow(table, row, account);
         }
       }
+      normalizeCategoryStatuses(database.handle);
       setMeta('pristine_seed', '0');
       setMeta('applying', '0');
       // Include children created offline after another device deleted the topic
@@ -216,13 +222,12 @@ WHERE deleted_at IS NULL AND topic_id IN (SELECT id FROM todo_topics WHERE delet
     final id = remote['id'] as String;
     // Reconcile concurrent creations of the same natural-key snapshot/review.
     // Ledger entry UUIDs are never changed or duplicated.
-    if (table == 'weekly_goals' || table == 'reviews') {
+    if (table == 'weekly_goals' ||
+        table == 'category_states' ||
+        table == 'reviews') {
       final matches = database.handle.select(
-        'SELECT id FROM $table WHERE week_start=?${table == 'weekly_goals' ? ' AND category_id=?' : ''}',
-        [
-          remote['week_start'],
-          if (table == 'weekly_goals') remote['category_id'],
-        ],
+        'SELECT id FROM $table WHERE week_start=?${table != 'reviews' ? ' AND category_id=?' : ''}',
+        [remote['week_start'], if (table != 'reviews') remote['category_id']],
       );
       if (matches.isNotEmpty && matches.first['id'] != id) {
         final oldId = matches.first['id'] as String;
@@ -267,6 +272,10 @@ WHERE deleted_at IS NULL AND topic_id IN (SELECT id FROM todo_topics WHERE delet
           (local['deleted_at'] != null) != (remote['deleted_at'] != null)) {
         order = remote['deleted_at'] != null ? 1 : -1;
       }
+      if (table == 'category_states' &&
+          local['is_baseline'] != remote['is_baseline']) {
+        order = remote['is_baseline'] == false ? 1 : -1;
+      }
       if (order < 0) {
         if (divergent) _saveConflict(table, remote);
         database.handle.execute(
@@ -297,6 +306,17 @@ WHERE deleted_at IS NULL AND topic_id IN (SELECT id FROM todo_topics WHERE delet
     if (table == 'categories') {
       data['active'] = remote['active'] == true ? 1 : 0;
     }
+    if (table == 'category_states') {
+      for (final field in ['included', 'is_baseline']) {
+        if (remote[field] is! bool) {
+          throw const FormatException('Invalid cloud bar inclusion state');
+        }
+        data[field] = remote[field] == true ? 1 : 0;
+      }
+      if (remote['changed_at'] is! String) {
+        throw const FormatException('Invalid cloud bar state timestamp');
+      }
+    }
     if (table == 'categories' || table == 'weekly_goals') {
       GoalConfig.fromMap(data).validate();
     }
@@ -326,6 +346,7 @@ WHERE deleted_at IS NULL AND topic_id IN (SELECT id FROM todo_topics WHERE delet
       'deleted_at',
       'answered_at',
       'completed_at',
+      'changed_at',
     ]) {
       if (data[field] != null) {
         data[field] = DateTime.parse(

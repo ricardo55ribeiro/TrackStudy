@@ -136,7 +136,7 @@ void main() {
       final s = SyncStore(r.database);
       s.bind(account, project);
       r.db.execute(
-        'DROP TABLE todo_tasks; DROP TABLE todo_topics; PRAGMA user_version=6',
+        'DROP TABLE category_states; DROP TABLE todo_tasks; DROP TABLE todo_topics; PRAGMA user_version=6',
       );
       final tables = r.db
           .select("SELECT name FROM sqlite_master WHERE type='table'")
@@ -153,7 +153,10 @@ void main() {
       for (final t in tables) {
         expect(r.db.select('SELECT * FROM $t'), before[t], reason: t);
       }
-      expect(r.db.select('PRAGMA user_version').single.values.single, 7);
+      expect(
+        r.db.select('PRAGMA user_version').single.values.single,
+        StudyDatabase.version,
+      );
       expect(r.todoTopics(), isEmpty);
     },
   );

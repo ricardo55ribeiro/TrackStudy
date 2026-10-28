@@ -146,7 +146,7 @@ void main() {
       final store = SyncStore(repo.database), raw = repo.database.handle;
       final identity = store.meta('device'), pending = store.pending;
       raw.execute(
-        'DROP TABLE todo_tasks; DROP TABLE todo_topics; DROP TABLE schedule_blocks; DROP TABLE academic_events; ALTER TABLE journal DROP COLUMN answer; ALTER TABLE journal DROP COLUMN answered_at; PRAGMA user_version=4',
+        'DROP TABLE category_states; DROP TABLE todo_tasks; DROP TABLE todo_topics; DROP TABLE schedule_blocks; DROP TABLE academic_events; ALTER TABLE journal DROP COLUMN answer; ALTER TABLE journal DROP COLUMN answered_at; PRAGMA user_version=4',
       );
       StudyDatabase(raw);
       expect(

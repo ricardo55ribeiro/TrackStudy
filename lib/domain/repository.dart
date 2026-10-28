@@ -10,6 +10,7 @@ abstract interface class StudyRepository {
   void saveCategory(String? id, GoalConfig config, Week current);
   void setCategoryStatus(
     String id, {
+    required Week current,
     required bool active,
     required bool archived,
   });

@@ -153,14 +153,11 @@ void main() {
         expect(repository.review(week).wentWrong, 'Mobile draft');
         expect(tester.takeException(), isNull);
         FocusManager.instance.primaryFocus?.unfocus();
-        await tester.tap(find.byTooltip('Settings'));
+        await selectTab(tester, StudyTab.week);
         await tester.pumpAndSettle();
-        await tester.scrollUntilVisible(
-          find.text('Research'),
-          200,
-          scrollable: find.byType(Scrollable).last,
-        );
-        await tester.tap(find.text('Research').last);
+        await tester.tap(find.text('Research'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Edit'));
         await tester.pumpAndSettle();
         tester.view.viewInsets = const FakeViewPadding(bottom: 280);
         await tester.pumpAndSettle();

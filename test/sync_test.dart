@@ -196,6 +196,7 @@ void main() {
         ],
       );
       final before = jsonDecode(a.exportJson())['tables'];
+      before['category_states'] = [];
       final pending = sa.pending;
       for (final table in syncTables) {
         for (final event in ['insert', 'update']) {
@@ -206,7 +207,7 @@ void main() {
         }
       }
       raw.execute(
-        'DROP TABLE todo_tasks; DROP TABLE todo_topics; DROP TABLE schedule_blocks; DROP TABLE academic_events; ALTER TABLE journal DROP COLUMN answer; ALTER TABLE journal DROP COLUMN answered_at; ALTER TABLE sync_records DROP COLUMN history; ALTER TABLE sync_conflicts DROP COLUMN archived_at; PRAGMA user_version=3',
+        'DROP TABLE category_states; DROP TABLE todo_tasks; DROP TABLE todo_topics; DROP TABLE schedule_blocks; DROP TABLE academic_events; ALTER TABLE journal DROP COLUMN answer; ALTER TABLE journal DROP COLUMN answered_at; ALTER TABLE sync_records DROP COLUMN history; ALTER TABLE sync_conflicts DROP COLUMN archived_at; PRAGMA user_version=3',
       );
       StudyDatabase(raw);
       expect(
@@ -650,7 +651,7 @@ void main() {
       a.saveReview(WeeklyReview(week: week.key, wins: const ['A', 'B', 'C']));
       a.reorder(a.categories().reversed.map((c) => c.id).toList());
       final gym = a.categories().firstWhere((c) => c.config.name == 'Gym');
-      a.setCategoryStatus(gym.id, active: false, archived: true);
+      a.setCategoryStatus(gym.id, current: next, active: false, archived: true);
       await sync(sa);
       await sync(sb);
       expect(b.categories().first.id, a.categories().first.id);

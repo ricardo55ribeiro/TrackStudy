@@ -18,7 +18,9 @@ Type an amount and press **Enter** or **+**. Inputs start empty and clear after 
 
 In **Settings → Tabs on this device**, drag a handle to reorder any tab, including **Progress Bars**. Hold the handle first on Android. Hidden tabs retain their position and data, at least one tab stays enabled and startup opens the first enabled tab. These preferences are not synchronized.
 
-Categories use the same drag handles and their order synchronizes across devices. Archived categories stay in a collapsed **Archived Categories** section with a restore control. Hiding Progress Bars also hides category management in Settings while preserving all tracking data.
+Manage categories directly in **Progress Bars**. Click or tap a bar's name for **Edit** and **Archive**. Drag its name on Windows or hold and drag on Android to reorder active bars without handles. Inputs, progress graphics and entry-history totals keep their separate interactions. **Add Bar** stays available at the bottom, including when all bars are archived. Category management is no longer in Settings.
+
+**Archived Bars** appears only when needed and starts collapsed. It contains compact names and Restore actions. Archiving excludes the entire current week from Progress Bars and the generated Weekly Review score while preserving all entries and undo records. Restoring includes the entire restoration week, including any progress already recorded in it. Earlier excluded weeks stay excluded. Repeated archive/restore actions in one week use the final state for that whole week. Past weeks have no management controls. Hiding Progress Bars only hides its interface and never changes category data.
 
 **To-Do List** defaults immediately after Progress Bars, including when upgrading a customized order. Add topics with the bottom button and tasks from the right of each topic header. Click or tap a topic title or task text to open its existing edit or delete menu. Drag active task text directly on Windows or hold and drag on Android. Check a task to save completion immediately while retaining it in place for five seconds to allow undo. Finished tasks expand independently per topic, sort by newest completion and return to the end of the active list when unchecked. See the [1.4.0 release and migration instructions](docs/TODO_LIST_RELEASE.md).
 
@@ -63,6 +65,8 @@ Sign in under **Settings → Sync**. Records save locally first, synchronize whe
 **Settings → Data** shows the database location and provides JSON export/restore. The database lives separately from the executable, so replacing the app does not replace your data. Restore validates the backup before changing data and creates a safety copy. Local databases and JSON exports are not encrypted; keep them private.
 
 Changing category defaults affects the current and future weeks; historical goals remain intact. Do not copy a live SQLite file on its own: use Export JSON or close the app first.
+
+Version 1.5.0 uses SQLite schema 8 and backup format 6. Formats 2 through 5 remain importable. Disabled legacy categories become archived without reactivation. An upgrade-week baseline preserves the old historical snapshots: previous archive/restore dates cannot be reconstructed from the old global flags, so older weeks with unknown inclusion retain their legacy behavior. Explicit weekly decisions synchronize and carry forward across skipped or offline weeks. Older backups cannot erase lifecycle decisions already present for their categories.
 
 ## Development checks
 

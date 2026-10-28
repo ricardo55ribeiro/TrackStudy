@@ -12,7 +12,6 @@ import 'package:trackstudy/domain/planning.dart';
 import 'package:trackstudy/presentation/app.dart';
 import 'package:trackstudy/presentation/common.dart';
 import 'package:trackstudy/presentation/monthly.dart';
-import 'package:trackstudy/presentation/settings.dart';
 import 'package:trackstudy/sync/sync_engine.dart';
 import 'package:trackstudy/sync/sync_store.dart';
 import 'support/sync_fakes.dart';
@@ -96,20 +95,35 @@ void main() {
             .firstWhere((p) => p.categoryId == gym.categoryId);
         repo.commit(oldGym.goalId, 200, past);
         repo.commit(gym.goalId, 100, c.current);
-        repo.setCategoryStatus(ids[2], active: false, archived: true);
+        repo.setCategoryStatus(
+          ids[2],
+          current: c.current,
+          active: false,
+          archived: true,
+        );
         c.reorderCategory(3, 0);
         final order = repo.categories().map((category) => category.id).toList();
         expect(order, [ids[4], ids[0], ids[2], ids[1], ids[3], ids[5], ids[6]]);
         expect(c.progress.first.categoryId, gym.categoryId);
         final tables = jsonDecode(repo.exportJson())['tables'] as Map;
         for (var i = 0; i < 3; i++) {
-          repo.setCategoryStatus(gym.categoryId, active: false, archived: true);
+          repo.setCategoryStatus(
+            gym.categoryId,
+            current: c.current,
+            active: false,
+            archived: true,
+          );
           c.refresh();
           expect(
             c.progress.any((p) => p.categoryId == gym.categoryId),
             isFalse,
           );
-          repo.setCategoryStatus(gym.categoryId, active: true, archived: false);
+          repo.setCategoryStatus(
+            gym.categoryId,
+            current: c.current,
+            active: true,
+            archived: false,
+          );
           c.refresh();
           expect(c.progress.first.goalId, gym.goalId);
           expect(c.progress.first.total, 100);
@@ -231,7 +245,6 @@ void main() {
         [
           'Appearance',
           'Tabs on this device',
-          'Categories',
           if (platform == TargetPlatform.windows) 'Windows',
           'Week',
           'Data',
@@ -258,16 +271,11 @@ void main() {
         await tester.tap(progressSwitch);
         await tester.pumpAndSettle();
         expect(find.text('Categories'), findsNothing);
-        expect(find.byType(ArchivedCategories), findsNothing);
+        expect(find.byKey(const ValueKey('archived-bars')), findsNothing);
         expect(repo.categories().length, 7);
         await tester.tap(progressSwitch);
         await tester.pumpAndSettle();
-        await tester.scrollUntilVisible(
-          find.text('Categories'),
-          160,
-          scrollable: find.byType(Scrollable).last,
-        );
-        expect(find.text('Categories'), findsOneWidget);
+        expect(find.text('Categories'), findsNothing);
         await tester.pageBack();
         await tester.pumpAndSettle();
         expect(find.byType(MonthlyScreen), findsOneWidget);

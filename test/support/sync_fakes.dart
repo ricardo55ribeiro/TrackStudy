@@ -44,13 +44,14 @@ class FakeCloud implements SyncGateway {
       if (parent == null) throw StateError('Missing topic');
       incoming['deleted_at'] ??= parent['deleted_at'];
     }
-    if (table == 'weekly_goals' || table == 'reviews') {
+    if (table == 'weekly_goals' ||
+        table == 'category_states' ||
+        table == 'reviews') {
       final existing = tables[table]!.values
           .where(
             (r) =>
                 r['week_start'] == row['week_start'] &&
-                (table != 'weekly_goals' ||
-                    r['category_id'] == row['category_id']),
+                (table == 'reviews' || r['category_id'] == row['category_id']),
           )
           .firstOrNull;
       if (existing != null) incoming['id'] = existing['id'];
@@ -76,6 +77,11 @@ class FakeCloud implements SyncGateway {
         table.startsWith('todo_') &&
         (incoming['deleted_at'] != null) != (existing['deleted_at'] != null)) {
       winner = incoming['deleted_at'] != null;
+    }
+    if (existing != null &&
+        table == 'category_states' &&
+        incoming['is_baseline'] != existing['is_baseline']) {
+      winner = incoming['is_baseline'] == false;
     }
     if (existing != null &&
         !incomingCovers &&

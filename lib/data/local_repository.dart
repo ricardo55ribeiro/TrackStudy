@@ -7,6 +7,7 @@ import '../domain/week.dart';
 import '../domain/planning.dart';
 import '../domain/todo.dart';
 import 'database.dart';
+import 'category_lifecycle.dart';
 
 class LocalStudyRepository implements StudyRepository {
   final StudyDatabase database;
@@ -80,7 +81,15 @@ class LocalStudyRepository implements StudyRepository {
       )
       .toList();
   void _ensureWeek(Week week) {
-    for (final c in categories().where((c) => c.active && !c.archived)) {
+    _initializeLifecycle(week);
+    final included = db
+        .select(
+          'SELECT c.id FROM categories c WHERE ${categoryInclusionSql('c.id', '?')}=1',
+          [week.key],
+        )
+        .map((r) => r['id'])
+        .toSet();
+    for (final c in categories().where((c) => included.contains(c.id))) {
       if (db.select(
         'SELECT id FROM weekly_goals WHERE category_id=? AND week_start=?',
         [c.id, week.key],
@@ -100,15 +109,16 @@ class LocalStudyRepository implements StudyRepository {
 
   @override
   List<WeeklyProgress> loadWeek(Week week, {required Week current}) {
-    if (week == current) {
-      database.transaction(() => _ensureWeek(week));
-    }
+    database.transaction(() {
+      _initializeLifecycle(current);
+      if (week == current) _ensureWeek(week);
+    });
     return db
         .select(
           '''SELECT g.*, COALESCE(SUM(CASE WHEN e.undone_at IS NULL THEN e.amount ELSE 0 END),0) total,
       COUNT(CASE WHEN e.undone_at IS NULL THEN e.id END) active_entries FROM weekly_goals g
       JOIN categories c ON c.id=g.category_id LEFT JOIN entries e ON e.goal_id=g.id
-      WHERE g.week_start=? ${week == current ? 'AND c.active=1 AND c.archived_at IS NULL' : ''}
+      WHERE g.week_start=? AND ${categoryInclusionSql('g.category_id', 'g.week_start')}=1
       GROUP BY g.id ORDER BY ${week == current ? 'c.position' : 'g.position'},g.id''',
           [week.key],
         )
@@ -130,8 +140,9 @@ class LocalStudyRepository implements StudyRepository {
     config.validate();
     database.transaction(() {
       if (id == null) {
+        final categoryId = _uuid.v4();
         _insert('categories', {
-          'id': _uuid.v4(),
+          'id': categoryId,
           ...config.toMap(),
           'position': categories().length,
           'active': 1,
@@ -139,6 +150,7 @@ class LocalStudyRepository implements StudyRepository {
           'updated_at': now,
           'archived_at': null,
         });
+        _saveCategoryState(categoryId, current, included: true);
       } else {
         final old = categories().firstWhere((c) => c.id == id);
         final used = db.select(
@@ -170,12 +182,65 @@ class LocalStudyRepository implements StudyRepository {
   @override
   void setCategoryStatus(
     String id, {
+    required Week current,
     required bool active,
     required bool archived,
-  }) => db.execute(
-    'UPDATE categories SET active=?,archived_at=?,updated_at=? WHERE id=?',
-    [active ? 1 : 0, archived ? now : null, now, id],
-  );
+  }) => database.transaction(() {
+    if (!categories().any((c) => c.id == id)) {
+      throw const FormatException('This bar is no longer available.');
+    }
+    _initializeLifecycle(current);
+    _saveCategoryState(id, current, included: active && !archived);
+    normalizeCategoryStatuses(db);
+    _ensureWeek(current);
+  });
+
+  void _initializeLifecycle(Week current) {
+    for (final row in db.select(
+      '''SELECT c.* FROM categories c
+      WHERE NOT EXISTS (SELECT 1 FROM category_states s WHERE s.category_id=c.id)''',
+    )) {
+      _saveCategoryState(
+        row['id'] as String,
+        current,
+        included: row['active'] == 1 && row['archived_at'] == null,
+        baseline: true,
+        changedAt: row['archived_at'] as String?,
+      );
+    }
+    normalizeCategoryStatuses(db);
+  }
+
+  void _saveCategoryState(
+    String id,
+    Week week, {
+    required bool included,
+    bool baseline = false,
+    String? changedAt,
+  }) {
+    final stamp = now;
+    db.execute(
+      '''INSERT INTO category_states
+      (id,category_id,week_start,included,is_baseline,changed_at,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(category_id,week_start) DO UPDATE SET
+      included=excluded.included,is_baseline=excluded.is_baseline,
+      changed_at=excluded.changed_at,updated_at=excluded.updated_at''',
+      [
+        _uuid.v5(
+          Namespace.url.value,
+          'trackstudy:category-state:$id:${week.key}',
+        ),
+        id,
+        week.key,
+        included ? 1 : 0,
+        baseline ? 1 : 0,
+        changedAt ?? stamp,
+        stamp,
+        stamp,
+      ],
+    );
+  }
+
   @override
   void reorder(List<String> ids) {
     final actual = categories().map((c) => c.id).toSet();
@@ -197,7 +262,7 @@ class LocalStudyRepository implements StudyRepository {
 
   GoalConfig _editableGoal(String id, Week current) {
     final rows = db.select(
-      'SELECT g.* FROM weekly_goals g JOIN categories c ON c.id=g.category_id WHERE g.id=? AND g.week_start=? AND c.active=1 AND c.archived_at IS NULL',
+      'SELECT g.* FROM weekly_goals g JOIN categories c ON c.id=g.category_id WHERE g.id=? AND g.week_start=? AND c.active=1 AND c.archived_at IS NULL AND ${categoryInclusionSql('g.category_id', 'g.week_start')}=1',
       [id, current.key],
     );
     if (rows.isEmpty) {
@@ -629,6 +694,7 @@ class LocalStudyRepository implements StudyRepository {
   );
   static const tables = [
     'categories',
+    'category_states',
     'weekly_goals',
     'entries',
     'journal',
@@ -642,7 +708,7 @@ class LocalStudyRepository implements StudyRepository {
   @override
   String exportJson() => const JsonEncoder.withIndent('  ').convert({
     'format': 'trackstudy',
-    'version': 5,
+    'version': 6,
     'exported_at': now,
     'tables': {
       for (final table in tables)
@@ -664,13 +730,16 @@ class LocalStudyRepository implements StudyRepository {
     try {
       final decoded = jsonDecode(data) as Map<String, dynamic>;
       if (decoded['format'] != 'trackstudy' ||
-          ![2, 3, 4, 5].contains(decoded['version'])) {
+          ![2, 3, 4, 5, 6].contains(decoded['version'])) {
         throw const FormatException('Unsupported backup format/version');
       }
       final rows = decoded['tables'] as Map<String, dynamic>;
       final legacy = decoded['version'] == 2;
       candidate.database.transaction(() {
         for (final table in tables) {
+          if ((decoded['version'] as int) < 6 && table == 'category_states') {
+            continue;
+          }
           if ((decoded['version'] as int) < 5 && table.startsWith('todo_')) {
             continue;
           }
@@ -711,6 +780,7 @@ class LocalStudyRepository implements StudyRepository {
               'deleted_at',
               'answered_at',
               'completed_at',
+              'changed_at',
             ]) {
               if (row[key] != null &&
                   DateTime.tryParse(row[key] as String) == null) {
@@ -776,6 +846,13 @@ class LocalStudyRepository implements StudyRepository {
         throw const FormatException('Incomplete backup');
       }
       database.transaction(() {
+        // Older backups cannot erase lifecycle decisions they never contained
+        final retainedStates = (decoded['version'] as int) < 6
+            ? db
+                  .select('SELECT * FROM category_states')
+                  .map((r) => Map<String, Object?>.from(r))
+                  .toList()
+            : <Map<String, Object?>>[];
         final windowsPreferences = db
             .select("SELECT * FROM preferences WHERE key LIKE 'windows.%'")
             .map((r) => Map<String, Object?>.from(r))
@@ -860,6 +937,13 @@ class LocalStudyRepository implements StudyRepository {
         for (final row in windowsPreferences) {
           _insert('preferences', row);
         }
+        final restoredCategories = categories().map((c) => c.id).toSet();
+        for (final state in retainedStates) {
+          if (restoredCategories.contains(state['category_id'])) {
+            _insert('category_states', state);
+          }
+        }
+        _initializeLifecycle(Week.containing(clock()));
       });
     } catch (e) {
       throw FormatException('Restore rejected; existing data is unchanged. $e');

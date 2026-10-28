@@ -9,7 +9,7 @@ class StudyDatabase {
     handle.execute('PRAGMA synchronous = FULL');
     migrate();
   }
-  static const version = 7;
+  static const version = 8;
   void transaction(void Function() action) {
     handle.execute('BEGIN IMMEDIATE');
     try {
@@ -236,6 +236,44 @@ END;
 ''');
           }
         }
+      }
+      if (old < 8) {
+        handle.execute('''
+CREATE TABLE category_states (
+ id TEXT PRIMARY KEY, category_id TEXT NOT NULL REFERENCES categories(id),
+ week_start TEXT NOT NULL, included INTEGER NOT NULL CHECK(included IN (0,1)),
+ is_baseline INTEGER NOT NULL CHECK(is_baseline IN (0,1)),
+ changed_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ UNIQUE(category_id,week_start)
+);
+CREATE INDEX category_states_week ON category_states(category_id,week_start);
+CREATE TRIGGER category_state_identity BEFORE UPDATE ON category_states
+WHEN NEW.category_id<>OLD.category_id OR NEW.week_start<>OLD.week_start
+BEGIN SELECT RAISE(ABORT,'A bar state cannot change category or week'); END;
+''');
+        for (final event in ['INSERT', 'UPDATE']) {
+          handle.execute('''
+CREATE TRIGGER sync_category_states_${event.toLowerCase()} AFTER $event ON category_states
+WHEN (SELECT value FROM sync_meta WHERE key='applying')='0'
+BEGIN
+ UPDATE sync_meta SET value=CAST(value AS INTEGER)+1 WHERE key='clock';
+ INSERT INTO sync_records (table_name,record_id,version,writer,dirty,history)
+ VALUES ('category_states',NEW.id,(SELECT CAST(value AS INTEGER) FROM sync_meta WHERE key='clock'),(SELECT value FROM sync_meta WHERE key='device'),1,
+ json_object((SELECT value FROM sync_meta WHERE key='device'),(SELECT CAST(value AS INTEGER) FROM sync_meta WHERE key='clock')))
+ ON CONFLICT(table_name,record_id) DO UPDATE SET
+ history=json_set(json_set(sync_records.history,'\$.'||json_quote(sync_records.writer),sync_records.version),'\$.'||json_quote(excluded.writer),excluded.version),
+ version=excluded.version,writer=excluded.writer,dirty=1;
+ UPDATE sync_meta SET value='0' WHERE key='pristine_seed' AND NEW.is_baseline=0;
+END;
+''');
+        }
+        handle.execute('''
+CREATE TRIGGER sync_category_states_delete AFTER DELETE ON category_states
+WHEN (SELECT value FROM sync_meta WHERE key='applying')='0'
+BEGIN
+ DELETE FROM sync_records WHERE table_name='category_states' AND record_id=OLD.id;
+END;
+''');
       }
       handle.execute('PRAGMA user_version = $version');
     });

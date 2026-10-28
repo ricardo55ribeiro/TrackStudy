@@ -74,8 +74,12 @@ class StudyController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void reorderCategory(int oldIndex, int newIndex) {
+    checkClock();
+    if (!editable) return;
     final categories = repository.categories();
-    final active = categories.where((category) => !category.archived).toList();
+    final active = categories
+        .where((category) => category.active && !category.archived)
+        .toList();
     if (oldIndex < 0 ||
         oldIndex >= active.length ||
         newIndex < 0 ||
@@ -83,13 +87,48 @@ class StudyController extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     active.insert(newIndex, active.removeAt(oldIndex));
+    reorderBars(active.map((category) => category.id).toList());
+  }
+
+  void reorderBars(List<String> activeIds) {
+    checkClock();
+    if (!editable) return;
+    final categories = repository.categories();
+    final active = categories
+        .where((c) => c.active && !c.archived)
+        .map((c) => c.id)
+        .toSet();
+    if (activeIds.length != active.length ||
+        activeIds.toSet().length != activeIds.length ||
+        !active.containsAll(activeIds)) {
+      error = 'Bars changed. Try dragging again.';
+      notifyListeners();
+      return;
+    }
     var index = 0;
     // Keep archived slots so restoration retains a sensible existing position
     final ids = [
       for (final category in categories)
-        category.archived ? category.id : active[index++].id,
+        active.contains(category.id) ? activeIds[index++] : category.id,
     ];
     perform(() => repository.reorder(ids));
+  }
+
+  void archiveBar(String id, bool archived, Week expectedWeek) {
+    checkClock();
+    if (!editable || current != expectedWeek) {
+      error = 'The selected week changed. Return to this week and try again.';
+      notifyListeners();
+      return;
+    }
+    perform(
+      () => repository.setCategoryStatus(
+        id,
+        current: current,
+        active: !archived,
+        archived: archived,
+      ),
+    );
   }
 
   ThemeMode get theme => ThemeMode.values.firstWhere(

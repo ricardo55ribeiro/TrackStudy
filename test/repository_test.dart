@@ -139,16 +139,26 @@ void main() {
       expect(repo.categories().first.id, category.id);
       final p = repo.loadWeek(monday, current: monday).first;
       repo.commit(p.goalId, 100, monday);
-      repo.setCategoryStatus(category.id, active: false, archived: true);
+      repo.setCategoryStatus(
+        category.id,
+        current: monday,
+        active: false,
+        archived: true,
+      );
       expect(repo.loadWeek(monday, current: monday).length, 7);
       expect(
         repo
             .loadWeek(monday, current: monday.shift(1))
-            .firstWhere((p) => p.categoryId == category.id)
-            .total,
-        100,
+            .any((p) => p.categoryId == category.id),
+        isFalse,
       );
-      repo.setCategoryStatus(category.id, active: true, archived: false);
+      expect(repo.entries(p.goalId).single.amount, 100);
+      repo.setCategoryStatus(
+        category.id,
+        current: monday,
+        active: true,
+        archived: false,
+      );
       expect(repo.loadWeek(monday, current: monday).first.total, 100);
       expect(
         () => repo.saveCategory(
@@ -317,7 +327,7 @@ void main() {
       'DROP TABLE sync_records; DROP TABLE sync_meta; DROP TABLE sync_conflicts;',
     );
     raw.execute(
-      'DROP TABLE todo_tasks; DROP TABLE todo_topics; DROP TABLE schedule_blocks; DROP TABLE academic_events; ALTER TABLE journal DROP COLUMN answer; ALTER TABLE journal DROP COLUMN answered_at; DROP INDEX entries_goal_active; DROP INDEX goals_week; DROP INDEX journal_date; PRAGMA user_version=1',
+      'DROP TABLE category_states; DROP TABLE todo_tasks; DROP TABLE todo_topics; DROP TABLE schedule_blocks; DROP TABLE academic_events; ALTER TABLE journal DROP COLUMN answer; ALTER TABLE journal DROP COLUMN answered_at; DROP INDEX entries_goal_active; DROP INDEX goals_week; DROP INDEX journal_date; PRAGMA user_version=1',
     );
     final migrated = StudyDatabase(raw);
     expect(
@@ -334,7 +344,7 @@ void main() {
       raw
           .select('SELECT count(*) n FROM sync_records WHERE dirty=1')
           .first['n'],
-      15,
+      22,
     );
     expect(
       raw

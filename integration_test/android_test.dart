@@ -22,6 +22,7 @@ import '../test/support/tab_reordering.dart';
 import '../test/support/settings_acceptance.dart';
 import '../test/support/android_drawer_acceptance.dart';
 import '../test/support/todo_acceptance.dart';
+import '../test/support/lifecycle_acceptance.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -49,6 +50,7 @@ void main() {
   testWidgets(
     'fresh Android login, native SQLite, two-device convergence and offline retry',
     (tester) async {
+      await exerciseWeeklyLifecycle();
       final support = await getApplicationSupportDirectory();
       expect(support.path.startsWith('/'), isTrue);
       final directory = await Directory(

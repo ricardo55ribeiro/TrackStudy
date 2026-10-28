@@ -6,41 +6,158 @@ import '../application/study_controller.dart';
 import '../domain/models.dart';
 import 'progress_bar.dart';
 import 'common.dart';
+import 'category_editor.dart';
 
-class Dashboard extends ConsumerWidget {
+class Dashboard extends ConsumerStatefulWidget {
   const Dashboard({super.key});
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<Dashboard> createState() => _DashboardState();
+}
+
+class _DashboardState extends ConsumerState<Dashboard> {
+  bool expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
     final c = ref.watch(studyProvider);
-    if (c.progress.isEmpty) {
-      return Center(
-        child: Text(
-          c.editable
-              ? 'Add or enable a category in Settings.'
-              : 'No tracking recorded for this week.',
-        ),
-      );
+    if (!c.editable && c.progress.isEmpty) {
+      return Center(child: Text('No tracking recorded for this week.'));
     }
-    return ListView.separated(
-      padding: EdgeInsets.fromLTRB(
-        pageInset(context),
-        0,
-        pageInset(context),
-        32,
-      ),
-      itemCount: c.progress.length,
-      separatorBuilder: (_, index) => const Divider(height: 1),
-      itemBuilder: (_, i) => CategoryRow(
-        key: ValueKey(c.progress[i].goalId),
-        progress: c.progress[i],
-      ),
+    final archived = c.repository
+        .categories()
+        .where((bar) => bar.archived || !bar.active)
+        .toList();
+    if (!c.editable || archived.isEmpty) expanded = false;
+    final progress = [...c.progress];
+    final inset = pageInset(context);
+    Widget row(int i) => Column(
+      key: ValueKey(progress[i].goalId),
+      children: [
+        CategoryRow(progress: progress[i], index: c.editable ? i : null),
+        if (i < progress.length - 1) const Divider(height: 1),
+      ],
+    );
+    return Column(
+      children: [
+        Expanded(
+          child: CustomScrollView(
+            key: const ValueKey('progress-scroll'),
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.symmetric(horizontal: inset),
+                sliver: c.editable
+                    ? SliverReorderableList(
+                        itemCount: progress.length,
+                        itemBuilder: (_, i) => row(i),
+                        proxyDecorator: (child, index, animation) => Material(
+                          color: Theme.of(context).colorScheme.surfaceContainer,
+                          elevation: 2,
+                          child: child,
+                        ),
+                        onReorderItem: (oldIndex, newIndex) {
+                          final ids = progress
+                              .map((p) => p.categoryId)
+                              .toList();
+                          ids.insert(newIndex, ids.removeAt(oldIndex));
+                          c.reorderBars(ids);
+                        },
+                      )
+                    : SliverList.builder(
+                        itemCount: progress.length,
+                        itemBuilder: (_, i) => row(i),
+                      ),
+              ),
+              if (c.editable && progress.isEmpty)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                      'Add a bar or restore an archived bar to start tracking.',
+                    ),
+                  ),
+                ),
+              if (c.editable && archived.isNotEmpty)
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: inset),
+                  sliver: SliverList.list(
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          key: const ValueKey('archived-bars'),
+                          onPressed: () => setState(() => expanded = !expanded),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
+                          icon: AnimatedRotation(
+                            turns: expanded ? .25 : 0,
+                            duration: const Duration(milliseconds: 160),
+                            child: const Icon(Icons.chevron_right, size: 18),
+                          ),
+                          label: Text(
+                            'Archived Bars (${archived.length})',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ),
+                      if (expanded)
+                        for (final bar in archived)
+                          Row(
+                            key: ValueKey('archived-bar-${bar.id}'),
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  bar.config.name,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                key: ValueKey('restore-bar-${bar.id}'),
+                                onPressed: () =>
+                                    c.archiveBar(bar.id, false, c.current),
+                                child: const Text('Restore'),
+                              ),
+                            ],
+                          ),
+                    ],
+                  ),
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+            ],
+          ),
+        ),
+        if (c.editable)
+          Padding(
+            padding: EdgeInsets.fromLTRB(inset, 10, inset, 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.icon(
+                key: const ValueKey('add-bar'),
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => const CategoryEditor(),
+                ),
+                icon: const Icon(Icons.add, size: 24),
+                label: const Text('Add Bar'),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
 
 class CategoryRow extends ConsumerStatefulWidget {
   final WeeklyProgress progress;
-  const CategoryRow({super.key, required this.progress});
+  final int? index;
+  const CategoryRow({super.key, required this.progress, this.index});
   @override
   ConsumerState<CategoryRow> createState() => _CategoryRowState();
 }
@@ -187,13 +304,72 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
   );
   @override
   Widget build(BuildContext context) {
-    final editable = ref.watch(studyProvider).editable;
+    final c = ref.watch(studyProvider);
+    final editable = c.editable && widget.progress.week == c.current.key;
     final p = widget.progress;
-    final name = Text(
+    Widget name = Text(
       p.config.name,
       style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
       overflow: TextOverflow.ellipsis,
     );
+    if (editable) {
+      final week = c.current;
+      name = PopupMenuButton<String>(
+        key: ValueKey('bar-name-${p.categoryId}'),
+        tooltip: '',
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: 'edit', child: Text('Edit')),
+          PopupMenuItem(value: 'archive', child: Text('Archive')),
+        ],
+        onSelected: (action) async {
+          if (action == 'edit') {
+            final category = c.repository
+                .categories()
+                .where(
+                  (bar) =>
+                      bar.id == p.categoryId && bar.active && !bar.archived,
+                )
+                .firstOrNull;
+            if (category == null || !c.editable) return;
+            await showDialog<void>(
+              context: context,
+              builder: (_) => CategoryEditor(category: category),
+            );
+          } else if (await confirm(
+            context,
+            'Archive ${p.config.name}?',
+            '${p.config.name} will be hidden from this entire week\'s Progress Bars and Weekly Review score. Your recorded progress and previous weeks will be preserved. You can restore it at any time.',
+            action: 'Archive',
+          )) {
+            c.archiveBar(p.categoryId, true, week);
+          }
+        },
+        child: Container(
+          alignment: Alignment.centerLeft,
+          constraints: BoxConstraints(
+            minHeight: Theme.of(context).platform == TargetPlatform.android
+                ? 48
+                : 36,
+          ),
+          padding: const EdgeInsets.only(right: 8),
+          child: name,
+        ),
+      );
+      if (widget.index != null) {
+        name = Theme.of(context).platform == TargetPlatform.android
+            ? ReorderableDelayedDragStartListener(
+                index: widget.index!,
+                child: name,
+              )
+            : ReorderableDragStartListener(
+                index: widget.index!,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.grab,
+                  child: name,
+                ),
+              );
+      }
+    }
     final bar = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,

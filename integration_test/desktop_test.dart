@@ -18,6 +18,7 @@ import 'package:uuid/uuid.dart';
 import '../test/support/tab_reordering.dart';
 import '../test/support/settings_acceptance.dart';
 import '../test/support/todo_acceptance.dart';
+import '../test/support/lifecycle_acceptance.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -104,6 +105,7 @@ void main() {
   testWidgets('native Windows acceptance with file-backed restart', (
     tester,
   ) async {
+    await exerciseWeeklyLifecycle();
     final directory = await Directory.systemTemp.createTemp(
       'trackstudy-native-',
     );

@@ -1,5 +1,6 @@
 const syncTables = [
   'categories',
+  'category_states',
   'weekly_goals',
   'entries',
   'journal',

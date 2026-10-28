@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:trackstudy/domain/week.dart';
 import 'package:trackstudy/sync/supabase_gateway.dart';
 import 'package:trackstudy/sync/sync_engine.dart';
 import 'package:trackstudy/sync/sync_store.dart';
@@ -10,16 +11,25 @@ import 'support/sync_fakes.dart' show account, project;
 
 void main() {
   for (final missingTable in [
+    'category_states',
     'journal',
     'schedule_blocks',
     'todo_topics',
     'todo_tasks',
   ]) {
     test(
-      'missing 005 $missingTable columns prevents uploads and retains local edits',
+      'missing $missingTable schema prevents uploads and retains local edits',
       () async {
         final repo = memory();
         addTearDown(repo.close);
+        final week = Week.containing(DateTime.now());
+        final bar = repo.loadWeek(week, current: week).first;
+        repo.setCategoryStatus(
+          bar.categoryId,
+          current: week,
+          active: false,
+          archived: true,
+        );
         final entry = thought();
         final topic = repo.addTodoTopic('Safe offline');
         repo.addTodoTask(topic, 'Keep this task');
@@ -74,6 +84,11 @@ void main() {
         );
         expect(requests, everyElement('GET'));
         expect(store.pending, pending);
+        expect(store.pendingRows('category_states'), isNotEmpty);
+        expect(
+          repo.categories().firstWhere((c) => c.id == bar.categoryId).archived,
+          isTrue,
+        );
         expect(repo.journal('').single.answer, 'Keep this answer');
         expect(repo.schedule(1).single.description, 'Keep this room');
         expect(repo.todoTasks(topic).single.text, 'Keep this task');

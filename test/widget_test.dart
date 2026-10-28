@@ -209,14 +209,9 @@ void main() {
     'settings current goal, category creation, archive and validation',
     (tester) async {
       await launch(tester);
-      await tester.tap(find.byTooltip('Settings'));
-      await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.text('Research'),
-        200,
-        scrollable: find.byType(Scrollable).last,
-      );
       await tester.tap(find.text('Research'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit'));
       await tester.pumpAndSettle();
       await tester.enterText(find.widgetWithText(TextField, 'Target'), '5');
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
@@ -225,12 +220,7 @@ void main() {
       await tester.enterText(find.widgetWithText(TextField, 'Target'), '10');
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.text('Add category'),
-        200,
-        scrollable: find.byType(Scrollable).last,
-      );
-      await tester.tap(find.text('Add category'));
+      await tester.tap(find.byKey(const ValueKey('add-bar')));
       await tester.pumpAndSettle();
       await tester.enterText(
         find.widgetWithText(TextField, 'Name'),
@@ -240,17 +230,27 @@ void main() {
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.text('Open Source'),
-        -100,
-        scrollable: find.byType(Scrollable).last,
+        100,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('progress-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       expect(find.text('Open Source'), findsOneWidget);
-      await tester.tap(find.byTooltip('Archive category').last);
+      await tester.tap(find.text('Open Source'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archive'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Archive'));
       await tester.pumpAndSettle();
-      expect(find.text('Archived Categories'), findsOneWidget);
+      expect(find.text('Archived Bars (1)'), findsOneWidget);
       expect(find.text('Open Source'), findsNothing);
-      await tester.pageBack();
+      await tester.drag(
+        find.byKey(const ValueKey('progress-scroll')),
+        const Offset(0, 800),
+      );
       await tester.pumpAndSettle();
       expect(find.text('0 / 10 h'), findsOneWidget);
       expect(find.text('Open Source'), findsNothing);

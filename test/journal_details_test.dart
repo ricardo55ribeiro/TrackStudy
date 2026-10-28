@@ -41,7 +41,7 @@ void main() {
       final store = SyncStore(repo.database), raw = repo.database.handle;
       final device = store.meta('device'), pending = store.pending;
       raw.execute(
-        'DROP TABLE todo_tasks; DROP TABLE todo_topics; ALTER TABLE journal DROP COLUMN answer; ALTER TABLE journal DROP COLUMN answered_at; ALTER TABLE schedule_blocks DROP COLUMN description; PRAGMA user_version=5',
+        'DROP TABLE category_states; DROP TABLE todo_tasks; DROP TABLE todo_topics; ALTER TABLE journal DROP COLUMN answer; ALTER TABLE journal DROP COLUMN answered_at; ALTER TABLE schedule_blocks DROP COLUMN description; PRAGMA user_version=5',
       );
       final originalJournal = raw.select('SELECT * FROM journal').single;
       StudyDatabase(raw);
@@ -145,7 +145,7 @@ void main() {
       repo.answerJournal(entry.id, 'Explanation', question: entry.question);
       repo.saveSchedule(block);
       final backup = repo.exportJson();
-      expect(jsonDecode(backup)['version'], 5);
+      expect(jsonDecode(backup)['version'], 6);
       final restored = memory();
       addTearDown(restored.close);
       restored.restoreJson(backup);
