@@ -38,3 +38,4 @@ trackstudy-*.json
 *.before-first-sync-*.json
 *.before-restore-*.json
 local-backups/
+/*.dll
