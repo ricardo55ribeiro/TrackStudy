@@ -22,6 +22,7 @@ import '../test/support/tab_reordering.dart';
 import '../test/support/settings_acceptance.dart';
 import '../test/support/android_drawer_acceptance.dart';
 import '../test/support/todo_acceptance.dart';
+import '../test/support/topic_reordering.dart';
 import '../test/support/lifecycle_acceptance.dart';
 
 void main() {
@@ -50,8 +51,8 @@ void main() {
   testWidgets(
     'fresh Android login, native SQLite, two-device convergence and offline retry',
     (tester) async {
-      await exerciseWeeklyLifecycle();
       final support = await getApplicationSupportDirectory();
+      await exerciseWeeklyLifecycle(temporaryRoot: support);
       expect(support.path.startsWith('/'), isTrue);
       final directory = await Directory(
         '${support.path}/acceptance-${DateTime.now().microsecondsSinceEpoch}',
@@ -253,6 +254,7 @@ void main() {
         await exerciseAndroidDrawer(tester);
         await exerciseCategorySettings(tester, touch: true);
         await exerciseTodo(tester, touch: true);
+        await exerciseTopicReordering(tester, touch: true);
         await tester.pump(const Duration(seconds: 3));
         await sync.sync(manual: true);
         await exerciseTabReordering(tester, touch: true);

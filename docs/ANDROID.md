@@ -1,10 +1,10 @@
 # TrackStudy on Android
 
-Android 7.0 (API 24) or newer is supported. The application ID is `dev.trackstudy.trackstudy`. Windows and Android share the same tracking rules, SQLite storage, journal, planning features, and optional sync engine.
+Android 7.0 (API 24) or newer is supported. The application ID is `dev.trackstudy.trackstudy`. Windows and Android share the same tracking rules, SQLite storage, journal, planning features and optional sync engine.
 
 ## Build
 
-Install Flutter 3.47.5, Android SDK platform 36, and a compatible JDK (JDK 21 is used by this project). Accept the Android SDK licenses. The build uses NDK 28.2.13676358; Gradle can download missing SDK components. The PowerShell helper detects standard Windows Android Studio/SDK locations, or uses `JAVA_HOME` and `ANDROID_HOME`.
+Install Flutter 3.47.5, Android SDK platform 36 and a compatible JDK (JDK 21 is used by this project). Accept the Android SDK licenses. The build uses NDK 28.2.13676358; Gradle can download missing SDK components. The PowerShell helper detects standard Windows Android Studio/SDK locations, or uses `JAVA_HOME` and `ANDROID_HOME`.
 
 From the project root:
 

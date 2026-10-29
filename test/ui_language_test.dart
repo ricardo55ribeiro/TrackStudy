@@ -34,10 +34,14 @@ void main() {
       );
       expect(
         source,
-        isNot(contains('academic events, and local preferences')),
+        isNot(matches(RegExp(r'academic events,\s+and local preferences'))),
         reason: file.path,
       );
-      expect(source, isNot(contains('h, count, or custom')), reason: file.path);
+      expect(
+        source,
+        isNot(matches(RegExp(r'h, count,\s+or custom'))),
+        reason: file.path,
+      );
     }
   });
 }

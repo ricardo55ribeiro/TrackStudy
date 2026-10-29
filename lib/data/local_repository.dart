@@ -595,6 +595,23 @@ class LocalStudyRepository implements StudyRepository {
   });
 
   @override
+  void reorderTodoTopics(List<String> ids) => database.transaction(() {
+    final topics = todoTopics().map((topic) => topic.id).toSet();
+    if (ids.length != topics.length ||
+        ids.toSet().length != ids.length ||
+        !topics.containsAll(ids)) {
+      throw const FormatException('Topics changed. Try dragging again.');
+    }
+    final stamp = now;
+    for (var i = 0; i < ids.length; i++) {
+      db.execute(
+        'UPDATE todo_topics SET position=?,updated_at=? WHERE id=? AND position<>?',
+        [i, stamp, ids[i], i],
+      );
+    }
+  });
+
+  @override
   String addTodoTask(String topicId, String text) {
     final value = todoText(text), id = _uuid.v4(), stamp = now;
     database.transaction(() {

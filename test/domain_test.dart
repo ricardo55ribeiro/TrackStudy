@@ -32,7 +32,7 @@ void main() {
     });
   });
   group('Exact decimal amounts', () {
-    test('decimal, locale comma, quarter hour, and accumulation', () {
+    test('decimal, locale comma, quarter hour and accumulation', () {
       expect(Amount.parse('1.5'), 150);
       expect(Amount.parse(' 1,25 '), 125);
       expect(Amount.parse('0.1') * 10, 100);

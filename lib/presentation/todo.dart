@@ -1,9 +1,17 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/study_controller.dart';
 import '../domain/todo.dart';
 import 'common.dart';
+
+class _TopicDrag {
+  final String id;
+  final List<String> order;
+  final List<String> preview;
+  _TopicDrag(this.id, this.order) : preview = [...order];
+}
 
 class TodoScreen extends ConsumerStatefulWidget {
   const TodoScreen({super.key});
@@ -15,15 +23,175 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
   final pending = <String, ({String completedAt, Timer timer})>{};
   final expanded = <String>{};
   final scroll = ScrollController();
+  EdgeDraggingAutoScroller? topicAutoScroller;
+  _TopicDrag? topicDrag;
+  Offset? topicPointer;
+  final groupKeys = <String, GlobalKey>{};
+  final groupHeights = <String, double>{};
+  final groupOffsets = <String, double>{};
 
   @override
   void dispose() {
+    topicAutoScroller?.stopAutoScroll();
     for (final value in pending.values) {
       value.timer.cancel();
     }
     scroll.dispose();
     super.dispose();
   }
+
+  void measureGroups() {
+    for (final entry in groupKeys.entries) {
+      final box = entry.value.currentContext?.findRenderObject();
+      if (box is RenderBox && box.hasSize) {
+        groupHeights[entry.key] = box.size.height;
+      }
+    }
+  }
+
+  void previewOrder(List<String> order) {
+    final drag = topicDrag;
+    if (drag == null) return;
+    measureGroups();
+    final oldTops = <String, double>{};
+    var top = 0.0;
+    for (final id in drag.preview) {
+      oldTops[id] = top;
+      top += groupHeights[id] ?? 0;
+    }
+    top = 0;
+    for (final id in order) {
+      groupOffsets[id] = (groupOffsets[id] ?? 0) + top - oldTops[id]!;
+      top += groupHeights[id] ?? 0;
+    }
+    setState(() => drag.preview.replaceRange(0, drag.preview.length, order));
+  }
+
+  void endTopicDrag({bool accepted = false}) {
+    topicAutoScroller?.stopAutoScroll();
+    topicAutoScroller = null;
+    topicPointer = null;
+    if (!mounted || topicDrag == null) return;
+    if (!accepted) previewOrder(topicDrag!.order);
+    setState(() => topicDrag = null);
+  }
+
+  void hoverTopics(Offset pointer) {
+    final drag = topicDrag;
+    if (drag == null) return;
+    for (final id in drag.preview) {
+      if (id == drag.id) continue;
+      final box = groupKeys[id]?.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.attached || !box.hasSize) continue;
+      final local = box.globalToLocal(pointer);
+      if (!(Offset.zero & box.size).contains(local)) continue;
+      final after = local.dy >= box.size.height / 2;
+      final from = drag.preview.indexOf(drag.id);
+      var to = drag.preview.indexOf(id) + (after ? 1 : 0);
+      if (from < to) to--;
+      if (from == to) return;
+      final order = [...drag.preview];
+      order.insert(to, order.removeAt(from));
+      previewOrder(order);
+      return;
+    }
+  }
+
+  void scrollTopicDrag(Offset pointer) {
+    topicAutoScroller?.startAutoScrollIfNecessary(
+      Rect.fromCenter(center: pointer, width: 40, height: 40),
+    );
+  }
+
+  void acceptTopic(_TopicDrag drag) {
+    final c = ref.read(studyProvider);
+    final accepted = c.perform(
+      () => c.repository.reorderTodoTopics(drag.preview),
+    );
+    endTopicDrag(accepted: accepted);
+  }
+
+  Widget topicTitle(TodoTopic topic, List<String> order, Widget child) =>
+      Builder(
+        builder: (titleContext) {
+          final feedback = Material(
+            key: const ValueKey('topic-drag-preview'),
+            color: Theme.of(context).colorScheme.surfaceContainer,
+            elevation: 2,
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              width: MediaQuery.sizeOf(context).width - 2 * pageInset(context),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  topic.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+            ),
+          );
+          Offset anchor(
+            Draggable<Object> draggable,
+            BuildContext context,
+            Offset position,
+          ) {
+            final box = context.findRenderObject()! as RenderBox;
+            final local = box.globalToLocal(position);
+            return Offset(local.dx, local.dy.clamp(0, 24));
+          }
+
+          final data = _TopicDrag(topic.id, order);
+          void start() {
+            measureGroups();
+            topicAutoScroller = EdgeDraggingAutoScroller(
+              Scrollable.of(titleContext),
+              velocityScalar: 30,
+              onScrollViewScrolled: () {
+                if (mounted && topicPointer != null) {
+                  hoverTopics(topicPointer!);
+                  scrollTopicDrag(topicPointer!);
+                }
+              },
+            );
+            setState(() => topicDrag = data);
+          }
+
+          void update(DragUpdateDetails details) {
+            topicPointer = details.globalPosition;
+            hoverTopics(details.globalPosition);
+            scrollTopicDrag(details.globalPosition);
+          }
+
+          return Theme.of(context).platform == TargetPlatform.android
+              ? LongPressDraggable<_TopicDrag>(
+                  data: data,
+                  axis: Axis.vertical,
+                  dragAnchorStrategy: anchor,
+                  feedback: feedback,
+                  onDragStarted: start,
+                  onDragUpdate: update,
+                  onDragCompleted: () => endTopicDrag(accepted: true),
+                  onDraggableCanceled: (_, _) => endTopicDrag(),
+                  child: child,
+                )
+              : Draggable<_TopicDrag>(
+                  data: data,
+                  axis: Axis.vertical,
+                  dragAnchorStrategy: anchor,
+                  feedback: feedback,
+                  onDragStarted: start,
+                  onDragUpdate: update,
+                  onDragCompleted: () => endTopicDrag(accepted: true),
+                  onDraggableCanceled: (_, _) => endTopicDrag(),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.grab,
+                    child: child,
+                  ),
+                );
+        },
+      );
 
   void toggle(TodoTask task) {
     final c = ref.read(studyProvider);
@@ -189,53 +357,107 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
       }
     }
     expanded.retainAll(topics.map((t) => t.id));
+    if (topicDrag != null && !topics.any((t) => t.id == topicDrag!.id)) {
+      topicAutoScroller?.stopAutoScroll();
+      topicDrag = null;
+    }
+    final byId = {for (final topic in topics) topic.id: topic};
+    groupKeys.removeWhere((id, _) => !byId.containsKey(id));
+    groupHeights.removeWhere((id, _) => !byId.containsKey(id));
+    groupOffsets.removeWhere((id, _) => !byId.containsKey(id));
+    final order = topicDrag == null
+        ? topics.map((t) => t.id).toList()
+        : [
+            ...topicDrag!.preview.where(byId.containsKey),
+            ...topics
+                .map((t) => t.id)
+                .where((id) => !topicDrag!.preview.contains(id)),
+          ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: CustomScrollView(
-            controller: scroll,
-            slivers: [
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(
-                  pageInset(context),
-                  12,
-                  pageInset(context),
-                  12,
-                ),
-                sliver: SliverToBoxAdapter(
-                  child: Text(
-                    'To-Do List',
-                    style: Theme.of(context).textTheme.headlineSmall,
+          child: DragTarget<_TopicDrag>(
+            onWillAcceptWithDetails: (_) => true,
+            onAcceptWithDetails: (details) => acceptTopic(details.data),
+            builder: (_, candidates, rejected) => CustomScrollView(
+              key: const ValueKey('todo-scroll'),
+              controller: scroll,
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    pageInset(context),
+                    12,
+                    pageInset(context),
+                    12,
                   ),
-                ),
-              ),
-              if (topics.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.checklist_rounded,
-                          color: scheme.primary,
-                          size: 36,
-                        ),
-                        const SizedBox(height: 14),
-                        const Text(
-                          'No topics yet. Add a topic to get started.',
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+                  sliver: SliverToBoxAdapter(
+                    child: Text(
+                      'To-Do List',
+                      style: Theme.of(context).textTheme.headlineSmall,
                     ),
                   ),
                 ),
-              for (final topic in topics)
-                ...topicSlivers(topic, tasks[topic.id]!),
-              const SliverToBoxAdapter(child: SizedBox(height: 12)),
-            ],
+                if (topics.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.checklist_rounded,
+                            color: scheme.primary,
+                            size: 36,
+                          ),
+                          const SizedBox(height: 14),
+                          const Text(
+                            'No topics yet. Add a topic to get started.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final id = order[index];
+                      return _TopicMotion(
+                        key: ValueKey('topic-group-$id'),
+                        slot: groupOffsets[id] ?? 0,
+                        keepAlive: topicDrag?.id == id,
+                        boundsKey: groupKeys.putIfAbsent(id, GlobalKey.new),
+                        child: Opacity(
+                          opacity: topicDrag?.id == id ? 0 : 1,
+                          child: IgnorePointer(
+                            ignoring: topicDrag != null,
+                            child: ShrinkWrappingViewport(
+                              axisDirection: AxisDirection.down,
+                              offset: ViewportOffset.zero(),
+                              slivers: topicSlivers(
+                                byId[id]!,
+                                tasks[id]!,
+                                order,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    childCount: order.length,
+                    findChildIndexCallback: (key) {
+                      final index = order.indexWhere(
+                        (id) => key == ValueKey('topic-group-$id'),
+                      );
+                      return index < 0 ? null : index;
+                    },
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
+              ],
+            ),
           ),
         ),
         Padding(
@@ -259,7 +481,11 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
     );
   }
 
-  List<Widget> topicSlivers(TodoTopic topic, List<TodoTask> tasks) {
+  List<Widget> topicSlivers(
+    TodoTopic topic,
+    List<TodoTask> tasks,
+    List<String> order,
+  ) {
     final active = tasks
         .where((t) => !t.completed || pending.containsKey(t.id))
         .toList();
@@ -281,25 +507,34 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: PopupMenuButton<String>(
-                  key: ValueKey('topic-menu-${topic.id}'),
-                  tooltip: 'Topic actions',
-                  onSelected: (action) => action == 'rename'
-                      ? editor(topic: topic)
-                      : deleteTopic(topic),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'rename', child: Text('Rename topic')),
-                    PopupMenuItem(value: 'delete', child: Text('Delete topic')),
-                  ],
-                  child: Container(
-                    constraints: const BoxConstraints(minHeight: 48),
-                    alignment: Alignment.centerLeft,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      topic.title,
-                      key: ValueKey('topic-${topic.id}'),
-                      style: Theme.of(context).textTheme.titleMedium!.copyWith(
-                        fontWeight: FontWeight.bold,
+                child: topicTitle(
+                  topic,
+                  order,
+                  PopupMenuButton<String>(
+                    key: ValueKey('topic-menu-${topic.id}'),
+                    tooltip: '',
+                    onSelected: (action) => action == 'rename'
+                        ? editor(topic: topic)
+                        : deleteTopic(topic),
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'rename',
+                        child: Text('Rename topic'),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text('Delete topic'),
+                      ),
+                    ],
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        topic.title,
+                        key: ValueKey('topic-${topic.id}'),
+                        style: Theme.of(context).textTheme.titleMedium!
+                            .copyWith(fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
@@ -391,6 +626,73 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
         sliver: const SliverToBoxAdapter(child: Divider(height: 1)),
       ),
     ];
+  }
+}
+
+// Animate whole groups between list slots while keeping the drag preview compact
+class _TopicMotion extends StatefulWidget {
+  final double slot;
+  final GlobalKey boundsKey;
+  final bool keepAlive;
+  final Widget child;
+  const _TopicMotion({
+    super.key,
+    required this.slot,
+    required this.boundsKey,
+    required this.keepAlive,
+    required this.child,
+  });
+
+  @override
+  State<_TopicMotion> createState() => _TopicMotionState();
+}
+
+class _TopicMotionState extends State<_TopicMotion>
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  late final animation = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+    value: 1,
+  );
+  double displacement = 0;
+
+  double get offset =>
+      displacement * (1 - Curves.easeOutCubic.transform(animation.value));
+
+  @override
+  bool get wantKeepAlive => widget.keepAlive;
+
+  @override
+  void didUpdateWidget(_TopicMotion oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    updateKeepAlive();
+    if (widget.slot != oldWidget.slot) {
+      displacement = offset + oldWidget.slot - widget.slot;
+      animation.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    animation.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return SizedBox(
+      key: widget.boundsKey,
+      child: AnimatedBuilder(
+        animation: animation,
+        child: widget.child,
+        builder: (_, child) => Transform.translate(
+          offset: Offset(0, offset),
+          transformHitTests: false,
+          child: child,
+        ),
+      ),
+    );
   }
 }
 

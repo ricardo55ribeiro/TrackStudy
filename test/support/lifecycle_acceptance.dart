@@ -8,8 +8,10 @@ import 'package:trackstudy/sync/sync_engine.dart';
 import 'package:trackstudy/sync/sync_store.dart';
 import 'sync_fakes.dart';
 
-Future<void> exerciseWeeklyLifecycle() async {
-  final folder = await Directory.systemTemp.createTemp('native-bar-lifecycle-');
+Future<void> exerciseWeeklyLifecycle({Directory? temporaryRoot}) async {
+  final folder = await (temporaryRoot ?? Directory.systemTemp).createTemp(
+    'native-bar-lifecycle-',
+  );
   final path = '${folder.path}/fixture.sqlite';
   var local = LocalStudyRepository(StudyDatabase(sqlite3.open(path)));
   final peer = LocalStudyRepository(StudyDatabase(sqlite3.openInMemory()));

@@ -45,7 +45,7 @@ SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_PUBLIC_KEY
 ```
 
-Keep `.env.local` out of Git. The run/build helpers include only these public client values; never use a service-role key, secret key, database password, or authentication token. Rebuild the app after changing configuration. Without these values, the app operates locally.
+Keep `.env.local` out of Git. The run/build helpers include only these public client values; never use a service-role key, secret key, database password or authentication token. Rebuild the app after changing configuration. Without these values, the app operates locally.
 
 Open **Settings → Sync → Sign in**. On a new device, sign in before entering independent data to adopt the existing cloud dataset. If both installations already contain edits, review the first-sync choice rather than assuming one dataset can be discarded. TrackStudy writes a local safety backup before the first authenticated merge.
 
@@ -55,7 +55,7 @@ Open **Settings → Sync → Sign in**. On a new device, sign in before entering
 - Records save to SQLite immediately. Pending edits survive restarts and retry after network failures. Changes merge by UUID and causal history; genuine concurrent conflicts retain recovery copies. Repeated synchronization does not create a new entry for an existing UUID.
 - Local data binds to its account/project. Sign-out removes the saved session but retains local records and pending changes. Use a separate OS profile/device for a separate account.
 - Session credentials use platform secure storage. SQLite databases and JSON backups are not encrypted; keep them private. Backups do not contain authentication tokens.
-- Tab order, tab visibility, theme, and Windows background/startup preferences remain local. Android can suspend synchronization until the app resumes.
+- Tab order, tab visibility, theme and Windows background/startup preferences remain local. Android can suspend synchronization until the app resumes.
 - Restore does not erase cloud history. For older features, cloud records missing from a restored backup can return on a later sync. Format 5 backups explicitly tombstone omitted to-do records; formats 2 through 4 leave to-do data unchanged.
 - To-do topics and tasks use permanent deletion timestamps. Deletion wins over concurrent edits and late tasks inherit their deleted topic's timestamp. Explicit backup recovery gives previously deleted to-do records new IDs so stale devices cannot revive the original records. Older backups preserve to-do data because they never contained it.
 - Explicit Windows `--data-dir` test/demo launches disable cloud sign-in and sync, keeping fixtures separate from a saved account.

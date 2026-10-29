@@ -35,6 +35,7 @@ abstract interface class StudyRepository {
   String addTodoTopic(String title);
   void renameTodoTopic(String id, String title);
   void deleteTodoTopic(String id);
+  void reorderTodoTopics(List<String> ids);
   String addTodoTask(String topicId, String text);
   void editTodoTask(String id, String text);
   void deleteTodoTask(String id);

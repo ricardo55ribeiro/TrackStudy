@@ -118,7 +118,7 @@ void main() {
     );
   });
   test(
-    'settings add, reorder, archive, reactivate, validate, and protect units',
+    'settings add, reorder, archive, reactivate, validate and protect units',
     () {
       const config = GoalConfig(
         name: 'Open Source',

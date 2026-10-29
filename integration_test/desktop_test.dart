@@ -18,6 +18,7 @@ import 'package:uuid/uuid.dart';
 import '../test/support/tab_reordering.dart';
 import '../test/support/settings_acceptance.dart';
 import '../test/support/todo_acceptance.dart';
+import '../test/support/topic_reordering.dart';
 import '../test/support/lifecycle_acceptance.dart';
 
 void main() {
@@ -196,6 +197,7 @@ void main() {
       );
       await exerciseCategorySettings(tester, touch: false);
       await exerciseTodo(tester, touch: false);
+      await exerciseTopicReordering(tester, touch: false);
       await exerciseTabReordering(tester, touch: false);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
