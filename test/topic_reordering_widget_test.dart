@@ -234,6 +234,18 @@ void main() {
         final viewport = tester.getRect(key('todo-scroll'));
         expect(preview.left, greaterThanOrEqualTo(viewport.left));
         expect(preview.right, lessThanOrEqualTo(viewport.right));
+        if (touch) {
+          expect(preview.width, 328);
+        } else {
+          final divider = tester.getRect(
+            find.descendant(
+              of: key('topic-group-$a'),
+              matching: find.byType(Divider),
+            ),
+          );
+          expect(preview.left, closeTo(divider.left, .01));
+          expect(preview.right, closeTo(divider.right, .01));
+        }
         expect(
           find.byWidgetPredicate((widget) {
             if (widget is! DecoratedBox ||
@@ -308,6 +320,47 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     }, variant: TargetPlatformVariant.only(platform));
 
+    if (!touch) {
+      testWidgets('Windows preview matches dividers after window resizing', (
+        tester,
+      ) async {
+        await launch(tester);
+        final id = repo.addTodoTopic('Research');
+        for (final width in [1600.0, 900.0, 2000.0]) {
+          tester.view.physicalSize = Size(width, 850);
+          for (final title in [
+            'Research',
+            'Mongol Raids',
+            'Long topic title ' * 8,
+          ]) {
+            repo.renameTodoTopic(id, title);
+            c.refresh();
+            await tester.pumpAndSettle();
+            final divider = tester.getRect(
+              find.descendant(
+                of: key('topic-group-$id'),
+                matching: find.byType(Divider),
+              ),
+            );
+            final gesture = await tester.startGesture(
+              tester.getTopLeft(key('topic-menu-$id')) + const Offset(20, 12),
+              kind: PointerDeviceKind.mouse,
+            );
+            await gesture.moveBy(const Offset(0, 30));
+            await tester.pump();
+            final preview = tester.getRect(key('topic-drag-preview'));
+            expect(preview.left, closeTo(divider.left, .01));
+            expect(preview.right, closeTo(divider.right, .01));
+            expect(preview.width, closeTo(divider.width, .01));
+            await gesture.cancel();
+            await tester.pumpAndSettle();
+          }
+        }
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      }, variant: TargetPlatformVariant.only(platform));
+    }
+
     testWidgets('single topic and stale topic drags are safe on $platform', (
       tester,
     ) async {
@@ -331,6 +384,19 @@ void main() {
       }
 
       var gesture = await start();
+      expect(
+        tester.getSize(key('topic-drag-preview')).width,
+        touch
+            ? 328
+            : tester
+                  .getSize(
+                    find.descendant(
+                      of: key('topic-group-$a'),
+                      matching: find.byType(Divider),
+                    ),
+                  )
+                  .width,
+      );
       await gesture.up();
       await tester.pumpAndSettle();
       expect(repo.todoTopics().single.id, a);

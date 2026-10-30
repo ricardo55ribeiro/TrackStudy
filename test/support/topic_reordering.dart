@@ -70,6 +70,17 @@ Future<void> exerciseTopicReordering(
     }
     expect(find.text('Topic actions'), findsNothing);
     expect(find.byType(PopupMenuItem<String>), findsNothing);
+    if (!touch && key('topic-drag-preview').evaluate().isNotEmpty) {
+      final preview = tester.getRect(key('topic-drag-preview'));
+      final divider = tester.getRect(
+        find.descendant(
+          of: key('topic-group-$b'),
+          matching: find.byType(Divider),
+        ),
+      );
+      expect(preview.left, closeTo(divider.left, .01));
+      expect(preview.right, closeTo(divider.right, .01));
+    }
     await gesture.up();
     await tester.pumpAndSettle();
   }

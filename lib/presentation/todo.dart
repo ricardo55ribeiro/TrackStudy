@@ -111,87 +111,92 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
     endTopicDrag(accepted: accepted);
   }
 
-  Widget topicTitle(TodoTopic topic, List<String> order, Widget child) =>
-      Builder(
-        builder: (titleContext) {
-          final feedback = Material(
-            key: const ValueKey('topic-drag-preview'),
-            color: Theme.of(context).colorScheme.surfaceContainer,
-            elevation: 2,
-            borderRadius: BorderRadius.circular(6),
-            child: SizedBox(
-              width: MediaQuery.sizeOf(context).width - 2 * pageInset(context),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  topic.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
+  Widget topicTitle(
+    TodoTopic topic,
+    List<String> order,
+    double contentWidth,
+    Widget child,
+  ) => Builder(
+    builder: (titleContext) {
+      final availableWidth =
+          MediaQuery.sizeOf(context).width - 2 * pageInset(context);
+      final feedback = Material(
+        key: const ValueKey('topic-drag-preview'),
+        color: Theme.of(context).colorScheme.surfaceContainer,
+        elevation: 2,
+        borderRadius: BorderRadius.circular(6),
+        child: SizedBox(
+          width: Theme.of(context).platform == TargetPlatform.windows
+              ? contentWidth
+              : availableWidth,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              topic.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium,
             ),
-          );
-          Offset anchor(
-            Draggable<Object> draggable,
-            BuildContext context,
-            Offset position,
-          ) {
-            final box = context.findRenderObject()! as RenderBox;
-            final local = box.globalToLocal(position);
-            return Offset(local.dx, local.dy.clamp(0, 24));
-          }
-
-          final data = _TopicDrag(topic.id, order);
-          void start() {
-            measureGroups();
-            topicAutoScroller = EdgeDraggingAutoScroller(
-              Scrollable.of(titleContext),
-              velocityScalar: 30,
-              onScrollViewScrolled: () {
-                if (mounted && topicPointer != null) {
-                  hoverTopics(topicPointer!);
-                  scrollTopicDrag(topicPointer!);
-                }
-              },
-            );
-            setState(() => topicDrag = data);
-          }
-
-          void update(DragUpdateDetails details) {
-            topicPointer = details.globalPosition;
-            hoverTopics(details.globalPosition);
-            scrollTopicDrag(details.globalPosition);
-          }
-
-          return Theme.of(context).platform == TargetPlatform.android
-              ? LongPressDraggable<_TopicDrag>(
-                  data: data,
-                  axis: Axis.vertical,
-                  dragAnchorStrategy: anchor,
-                  feedback: feedback,
-                  onDragStarted: start,
-                  onDragUpdate: update,
-                  onDragCompleted: () => endTopicDrag(accepted: true),
-                  onDraggableCanceled: (_, _) => endTopicDrag(),
-                  child: child,
-                )
-              : Draggable<_TopicDrag>(
-                  data: data,
-                  axis: Axis.vertical,
-                  dragAnchorStrategy: anchor,
-                  feedback: feedback,
-                  onDragStarted: start,
-                  onDragUpdate: update,
-                  onDragCompleted: () => endTopicDrag(accepted: true),
-                  onDraggableCanceled: (_, _) => endTopicDrag(),
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.grab,
-                    child: child,
-                  ),
-                );
-        },
+          ),
+        ),
       );
+      Offset anchor(
+        Draggable<Object> draggable,
+        BuildContext context,
+        Offset position,
+      ) {
+        final box = context.findRenderObject()! as RenderBox;
+        final local = box.globalToLocal(position);
+        return Offset(local.dx, local.dy.clamp(0, 24));
+      }
+
+      final data = _TopicDrag(topic.id, order);
+      void start() {
+        measureGroups();
+        topicAutoScroller = EdgeDraggingAutoScroller(
+          Scrollable.of(titleContext),
+          velocityScalar: 30,
+          onScrollViewScrolled: () {
+            if (mounted && topicPointer != null) {
+              hoverTopics(topicPointer!);
+              scrollTopicDrag(topicPointer!);
+            }
+          },
+        );
+        setState(() => topicDrag = data);
+      }
+
+      void update(DragUpdateDetails details) {
+        topicPointer = details.globalPosition;
+        hoverTopics(details.globalPosition);
+        scrollTopicDrag(details.globalPosition);
+      }
+
+      return Theme.of(context).platform == TargetPlatform.android
+          ? LongPressDraggable<_TopicDrag>(
+              data: data,
+              axis: Axis.vertical,
+              dragAnchorStrategy: anchor,
+              feedback: feedback,
+              onDragStarted: start,
+              onDragUpdate: update,
+              onDragCompleted: () => endTopicDrag(accepted: true),
+              onDraggableCanceled: (_, _) => endTopicDrag(),
+              child: child,
+            )
+          : Draggable<_TopicDrag>(
+              data: data,
+              axis: Axis.vertical,
+              dragAnchorStrategy: anchor,
+              feedback: feedback,
+              onDragStarted: start,
+              onDragUpdate: update,
+              onDragCompleted: () => endTopicDrag(accepted: true),
+              onDraggableCanceled: (_, _) => endTopicDrag(),
+              child: MouseRegion(cursor: SystemMouseCursors.grab, child: child),
+            );
+    },
+  );
 
   void toggle(TodoTask task) {
     final c = ref.read(studyProvider);
@@ -503,54 +508,57 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
       SliverPadding(
         padding: EdgeInsets.fromLTRB(inset, 12, inset, 0),
         sliver: SliverToBoxAdapter(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: topicTitle(
-                  topic,
-                  order,
-                  PopupMenuButton<String>(
-                    key: ValueKey('topic-menu-${topic.id}'),
-                    tooltip: '',
-                    onSelected: (action) => action == 'rename'
-                        ? editor(topic: topic)
-                        : deleteTopic(topic),
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
-                        value: 'rename',
-                        child: Text('Rename topic'),
-                      ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Text('Delete topic'),
-                      ),
-                    ],
-                    child: Container(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      alignment: Alignment.centerLeft,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text(
-                        topic.title,
-                        key: ValueKey('topic-${topic.id}'),
-                        style: Theme.of(context).textTheme.titleMedium!
-                            .copyWith(fontWeight: FontWeight.bold),
+          child: LayoutBuilder(
+            builder: (_, constraints) => Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: topicTitle(
+                    topic,
+                    order,
+                    constraints.maxWidth,
+                    PopupMenuButton<String>(
+                      key: ValueKey('topic-menu-${topic.id}'),
+                      tooltip: '',
+                      onSelected: (action) => action == 'rename'
+                          ? editor(topic: topic)
+                          : deleteTopic(topic),
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: 'rename',
+                          child: Text('Rename topic'),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Delete topic'),
+                        ),
+                      ],
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          topic.title,
+                          key: ValueKey('topic-${topic.id}'),
+                          style: Theme.of(context).textTheme.titleMedium!
+                              .copyWith(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                height: 48,
-                child: TextButton.icon(
-                  key: ValueKey('add-task-${topic.id}'),
-                  onPressed: () => editor(parent: topic.id),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add Task'),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 48,
+                  child: TextButton.icon(
+                    key: ValueKey('add-task-${topic.id}'),
+                    onPressed: () => editor(parent: topic.id),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add Task'),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
