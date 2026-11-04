@@ -9,7 +9,7 @@ class StudyDatabase {
     handle.execute('PRAGMA synchronous = FULL');
     migrate();
   }
-  static const version = 8;
+  static const version = 9;
   void transaction(void Function() action) {
     handle.execute('BEGIN IMMEDIATE');
     try {
@@ -274,6 +274,11 @@ BEGIN
  DELETE FROM sync_records WHERE table_name='category_states' AND record_id=OLD.id;
 END;
 ''');
+      }
+      if (old < 9) {
+        handle.execute(
+          "ALTER TABLE schedule_blocks ADD COLUMN colour TEXT NOT NULL DEFAULT 'blue' CHECK(colour IN ('blue','orange','green','red'))",
+        );
       }
       handle.execute('PRAGMA user_version = $version');
     });

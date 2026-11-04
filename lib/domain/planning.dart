@@ -48,9 +48,26 @@ abstract final class WallTime {
   }
 }
 
+enum ScheduleColour {
+  blue,
+  orange,
+  green,
+  red;
+
+  String get label => '${name[0].toUpperCase()}${name.substring(1)}';
+
+  static ScheduleColour parse(Object? value) {
+    for (final colour in values) {
+      if (colour.name == value) return colour;
+    }
+    throw const FormatException('Invalid schedule colour');
+  }
+}
+
 class ScheduleBlock {
   final String id, title;
   final String? description;
+  final ScheduleColour colour;
   final int weekday, startMinute, endMinute;
   const ScheduleBlock({
     required this.id,
@@ -59,6 +76,7 @@ class ScheduleBlock {
     required this.startMinute,
     required this.endMinute,
     this.description,
+    this.colour = ScheduleColour.blue,
   });
   void validate() {
     if ((description?.length ?? 0) > 2000) {
@@ -84,6 +102,7 @@ class ScheduleBlock {
   Map<String, Object?> toMap() => {
     'id': id,
     'title': title.trim(),
+    'colour': colour.name,
     'weekday': weekday,
     'start_minute': startMinute,
     'end_minute': endMinute,
@@ -98,6 +117,9 @@ class ScheduleBlock {
     startMinute: row['start_minute'] as int,
     endMinute: row['end_minute'] as int,
     description: row['description'] as String?,
+    colour: ScheduleColour.parse(
+      row.containsKey('colour') ? row['colour'] : 'blue',
+    ),
   );
 }
 

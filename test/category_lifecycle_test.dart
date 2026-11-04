@@ -127,7 +127,7 @@ void main() {
       repo.commit(p.goalId, 150, w1);
       final entries = rows('entries'), goals = rows('weekly_goals');
       repo.db.execute(
-        'DROP TABLE category_states; DELETE FROM sync_records WHERE table_name=\'category_states\'; PRAGMA user_version=7',
+        'DROP TABLE category_states; DELETE FROM sync_records WHERE table_name=\'category_states\'; ALTER TABLE schedule_blocks DROP COLUMN colour; PRAGMA user_version=7',
       );
       repo.db.execute(
         'UPDATE categories SET active=0,archived_at=NULL WHERE id=?',

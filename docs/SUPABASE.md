@@ -13,8 +13,11 @@ On a new project, run these migrations in order through Supabase's SQL Editor:
 5. [005_journal_answers_schedule_description.sql](../supabase/migrations/005_journal_answers_schedule_description.sql)
 6. [006_todo_list.sql](../supabase/migrations/006_todo_list.sql)
 7. [007_progress_bar_archiving.sql](../supabase/migrations/007_progress_bar_archiving.sql)
+8. [008_schedule_block_colours.sql](../supabase/migrations/008_schedule_block_colours.sql)
 
-For an existing project, apply only missing migrations. Do not rerun applied migrations or remove existing tables. Version 1.5.0 requires all seven for synchronization. Installing first is safe for local use, but synchronization waits until the schema is available.
+For an existing project, apply only missing migrations. Do not rerun applied migrations or remove existing tables. Version 1.6.0 requires all eight for synchronization. Installing first is safe for local use, but synchronization waits until the schema is available.
+
+For Daily Schedule colours, apply `supabase/migrations/008_schedule_block_colours.sql` once after 007. It adds the validated `colour` field with a Blue default and replaces `public.trackstudy_merge` while preserving the earlier causal and category-archiving rules. Older clients that omit colour preserve the stored value on updates and create Blue blocks. Updated clients explicitly check the new column before applying cloud data or uploading changes, including when the cloud table is empty. After applying the migration, retry **Sync now**. This release does not apply SQL automatically.
 
 To apply the Progress Bars update, open the intended project's **SQL Editor**, confirm migrations 001 through 006 are already applied and create a new query. Paste the complete contents of `supabase/migrations/007_progress_bar_archiving.sql`, including `begin;` and `commit;`, and run it once. Then run the verification queries below and choose **Settings > Sync > Sync now** on both updated applications. Update both clients before using the new archive behavior: older applications do not understand weekly inclusion.
 

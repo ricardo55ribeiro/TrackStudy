@@ -725,7 +725,7 @@ class LocalStudyRepository implements StudyRepository {
   @override
   String exportJson() => const JsonEncoder.withIndent('  ').convert({
     'format': 'trackstudy',
-    'version': 6,
+    'version': 7,
     'exported_at': now,
     'tables': {
       for (final table in tables)
@@ -747,7 +747,7 @@ class LocalStudyRepository implements StudyRepository {
     try {
       final decoded = jsonDecode(data) as Map<String, dynamic>;
       if (decoded['format'] != 'trackstudy' ||
-          ![2, 3, 4, 5, 6].contains(decoded['version'])) {
+          ![2, 3, 4, 5, 6, 7].contains(decoded['version'])) {
         throw const FormatException('Unsupported backup format/version');
       }
       final rows = decoded['tables'] as Map<String, dynamic>;
@@ -770,6 +770,9 @@ class LocalStudyRepository implements StudyRepository {
               .toSet();
           for (final raw in rows[table] as List) {
             final row = (raw as Map).cast<String, Object?>();
+            if ((decoded['version'] as int) < 7 && table == 'schedule_blocks') {
+              row.putIfAbsent('colour', () => 'blue');
+            }
             if ((decoded['version'] as int) < 4) {
               if (table == 'journal') {
                 row.putIfAbsent('answer', () => null);

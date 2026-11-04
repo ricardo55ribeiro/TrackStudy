@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:trackstudy/domain/week.dart';
+import 'package:trackstudy/domain/planning.dart';
 import 'package:trackstudy/sync/supabase_gateway.dart';
 import 'package:trackstudy/sync/sync_engine.dart';
 import 'package:trackstudy/sync/sync_store.dart';
@@ -39,7 +40,17 @@ void main() {
           'Keep this answer',
           question: entry.question,
         );
-        repo.saveSchedule(lesson(description: 'Keep this room'));
+        repo.saveSchedule(
+          ScheduleBlock(
+            id: lesson().id,
+            title: 'Keep this block',
+            weekday: 1,
+            startMinute: 510,
+            endMinute: 600,
+            description: 'Keep this room',
+            colour: ScheduleColour.red,
+          ),
+        );
         final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
         addTearDown(() => server.close(force: true));
         final requests = <String>[];
@@ -54,7 +65,7 @@ void main() {
                 missingTable == 'journal'
                     ? 'answered_at'
                     : missingTable == 'schedule_blocks'
-                    ? 'description'
+                    ? 'colour'
                     : 'sync_history',
               ),
             );
@@ -91,6 +102,7 @@ void main() {
         );
         expect(repo.journal('').single.answer, 'Keep this answer');
         expect(repo.schedule(1).single.description, 'Keep this room');
+        expect(repo.schedule(1).single.colour, ScheduleColour.red);
         expect(repo.todoTasks(topic).single.text, 'Keep this task');
       },
     );

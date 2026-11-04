@@ -20,9 +20,13 @@ import '../test/support/settings_acceptance.dart';
 import '../test/support/todo_acceptance.dart';
 import '../test/support/topic_reordering.dart';
 import '../test/support/lifecycle_acceptance.dart';
+import '../test/support/schedule_colours.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('native schedule colour add, edit and cancel', (tester) async {
+    await exerciseScheduleColours(tester);
+  });
   testWidgets('native maximized startup/restore, tray and startup settings', (
     tester,
   ) async {
@@ -171,6 +175,7 @@ void main() {
           id: const Uuid().v4(),
           title: 'Native Gym',
           description: 'V0.04',
+          colour: ScheduleColour.green,
           weekday: 1,
           startMinute: 510,
           endMinute: 600,
@@ -212,6 +217,7 @@ void main() {
       ]);
       expect(repository.todoTasks(todoTopic).first.completed, isTrue);
       expect(repository.schedule(1).single.description, 'V0.04');
+      expect(repository.schedule(1).single.colour, ScheduleColour.green);
       expect(repository.journal('').single.answer, 'Native answer');
       expect(
         repository.preference('tab.order', ''),

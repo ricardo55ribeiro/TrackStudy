@@ -10,7 +10,7 @@ A local-first weekly tracking app for Windows and Android. Record study hours an
 - Research Journal with Learned, Question, Next and saved answers.
 - To-Do List with topics, topic and task drag reordering, a five-second completion grace period and collapsible finished tasks.
 - Weekly Review with scores derived from tracking and automatically saved drafts.
-- Recurring weekday schedules with descriptions, plus a monthly academic calendar.
+- Recurring weekday schedules with descriptions and individual Blue, Orange, Green or Red blocks, plus a monthly academic calendar.
 - Dark/light themes and device-local tab visibility and drag reordering.
 - Optional Windows tray mode, start at sign-in and background synchronization.
 
@@ -66,7 +66,7 @@ Sign in under **Settings → Sync**. Records save locally first, synchronize whe
 
 Changing category defaults affects the current and future weeks; historical goals remain intact. Do not copy a live SQLite file on its own: use Export JSON or close the app first.
 
-Version 1.5.0 uses SQLite schema 8 and backup format 6. Formats 2 through 5 remain importable. Disabled legacy categories become archived without reactivation. An upgrade-week baseline preserves the old historical snapshots: previous archive/restore dates cannot be reconstructed from the old global flags, so older weeks with unknown inclusion retain their legacy behavior. Explicit weekly decisions synchronize and carry forward across skipped or offline weeks. Older backups cannot erase lifecycle decisions already present for their categories.
+Version 1.6.0 uses SQLite schema 9 and backup format 7. Formats 2 through 6 remain importable. Daily Schedule colours default to Blue for existing blocks and older backups. Apply migration 008 manually before synchronizing this version; local edits remain safe and pending until then. Disabled legacy categories become archived without reactivation. An upgrade-week baseline preserves the old historical snapshots: previous archive/restore dates cannot be reconstructed from the old global flags, so older weeks with unknown inclusion retain their legacy behavior. Explicit weekly decisions synchronize and carry forward across skipped or offline weeks. Older backups cannot erase lifecycle decisions already present for their categories.
 
 ## Development checks
 

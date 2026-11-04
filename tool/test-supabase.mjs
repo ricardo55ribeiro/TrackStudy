@@ -23,7 +23,7 @@ try {
     grant execute on function auth.uid() to authenticated, anon;
   `);
   await db.query('insert into auth.users values ($1),($2)',[a,b]);
-  for (const file of ['001_initial.sql','002_sync.sql','003_causal_sync.sql','004_schedule_and_events.sql','005_journal_answers_schedule_description.sql','006_todo_list.sql','007_progress_bar_archiving.sql']) {
+  for (const file of ['001_initial.sql','002_sync.sql','003_causal_sync.sql','004_schedule_and_events.sql','005_journal_answers_schedule_description.sql','006_todo_list.sql','007_progress_bar_archiving.sql','008_schedule_block_colours.sql']) {
     const legacyJournal=randomUUID(), legacyBlock=randomUUID();
     if(file.startsWith('005')) {
       await db.query("insert into public.journal(id,user_id,learned,question,next,experiment) values ($1,$2,'Existing','Why?','Next','{}')",[legacyJournal,a]);
@@ -36,7 +36,19 @@ try {
       await db.query("insert into public.entries(id,user_id,goal_id,amount) values ($1,$2,$3,150)",[randomUUID(),a,legacyBlock]);
       legacyBefore=(await db.query('select to_jsonb(c) r from public.categories c where id=$1',[legacyJournal])).rows[0].r;
     }
+    if(file.startsWith('008')) {
+      await db.query("insert into public.schedule_blocks(id,user_id,title,weekday,start_minute,end_minute,description,sync_version,sync_writer,sync_history) values ($1,$2,'Legacy colour',1,510,600,'Room 4',4,'phone','{\"phone\":4}')",[legacyBlock,a]);
+      legacyBefore=(await db.query('select to_jsonb(t) r from public.schedule_blocks t where id=$1',[legacyBlock])).rows[0].r;
+    }
     await db.exec(await readFile(new URL(`../supabase/migrations/${file}`,import.meta.url),'utf8'));
+    if(file.startsWith('008')) {
+      const after=(await db.query('select to_jsonb(t) r from public.schedule_blocks t where id=$1',[legacyBlock])).rows[0].r;
+      check(after.colour==='blue','008 defaults existing blocks to Blue');
+      delete after.colour;
+      check(JSON.stringify(after)===JSON.stringify(legacyBefore),'008 preserves every legacy field and sync stamp');
+      await db.query('delete from public.schedule_blocks where id=$1',[legacyBlock]);
+    }
+
     if(file.startsWith('007')) {
       const after=(await db.query('select to_jsonb(c) r from public.categories c where id=$1',[legacyJournal])).rows[0].r;
       check(JSON.stringify(after)===JSON.stringify(legacyBefore),'007 leaves preexisting category timestamps, flags and sync metadata unchanged');
@@ -178,6 +190,38 @@ try {
     await rejects(()=>merge(table,{...row,id:randomUUID(),title:' '}),`${table}: empty title rejected`);
   }
   await rejects(()=>merge('schedule_blocks',{...planning.schedule_blocks,id:randomUUID(),end_minute:510}),'Invalid time interval rejected');
+  const colourBase=await merge('schedule_blocks',{...planning.schedule_blocks,id:randomUUID()});
+  check(colourBase.colour==='blue','Older client insert defaults to Blue');
+  let colourSaved=colourBase;
+  for (const colour of ['orange','green','red','blue']) {
+    colourSaved=await merge('schedule_blocks',{...colourSaved,colour,sync_version:colourSaved.sync_version+1,sync_writer:'colour-phone'});
+    check(colourSaved.colour===colour,`Persist ${colour} through merge`);
+  }
+  colourSaved=await merge('schedule_blocks',{...colourSaved,colour:'red',description:'Keep description',sync_version:20});
+  const oldClient={...colourSaved,title:'Old client edit',sync_version:21,sync_writer:'old-phone'};
+  delete oldClient.colour;
+  delete oldClient.description;
+  const oldSaved=await merge('schedule_blocks',oldClient);
+  check(oldSaved.colour==='red' && oldSaved.description==='Keep description','Older client preserves both colour and description');
+  check(oldSaved.title==='Old client edit','Older client edits still save');
+  check((await merge('schedule_blocks',oldClient)).revision===oldSaved.revision,'Older client retry is idempotent');
+  const beforeColourRace=(await db.query('select count(*)::int n from public.sync_conflicts')).rows[0].n;
+  await merge('schedule_blocks',{...oldSaved,colour:'orange',sync_version:30,sync_writer:'colour-a'});
+  const colourWinner=await merge('schedule_blocks',{...oldSaved,colour:'green',sync_version:30,sync_writer:'colour-z'});
+  check(colourWinner.colour==='green','Concurrent colour edits keep deterministic causal merge');
+  check((await db.query('select count(*)::int n from public.sync_conflicts')).rows[0].n===beforeColourRace+1,'Concurrent losing colour retained');
+  await merge('schedule_blocks',oldClient);
+  check((await db.query('select colour from public.schedule_blocks where id=$1',[colourBase.id])).rows[0].colour==='green','Stale older client cannot erase newer colour');
+  for (const colour of [null,'purple','Blue',42]) {
+    await rejects(()=>merge('schedule_blocks',{...colourWinner,colour,sync_version:40}),`Reject unsupported colour ${colour}`);
+    await rejects(()=>merge('schedule_blocks',{...planning.schedule_blocks,id:randomUUID(),colour}),`Reject invalid new colour ${colour}`);
+  }
+  await rejects(()=>db.query("update public.schedule_blocks set colour='purple' where id=$1",[colourBase.id]),'Direct writes obey colour constraint');
+  await asUser(b);
+  check((await db.query('select id from public.schedule_blocks where id=$1',[colourBase.id])).rows.length===0,'Colour migration preserves owner read isolation');
+  await rejects(()=>merge('schedule_blocks',{...colourWinner,colour:'red',sync_version:50}),'Colour migration preserves ownership on write');
+  await asUser(a);
+
   await rejects(()=>merge('schedule_blocks',{...planning.schedule_blocks,id:randomUUID(),weekday:8}),'Invalid weekday rejected');
   await rejects(()=>merge('academic_events',{...planning.academic_events,id:randomUUID(),event_date:'2026-02-30'}),'Invalid date rejected');
   await rejects(()=>merge('academic_events',{...planning.academic_events,id:randomUUID(),event_type:'unknown'}),'Invalid event type rejected');
@@ -341,5 +385,5 @@ try {
     await rejects(()=>db.query(`update public.${table} set user_id=$1`,[b]),`${table}: anonymous update denied`);
     await rejects(()=>db.exec(`delete from public.${table}`),`${table}: anonymous delete denied`);
   }
-  console.log(`PASS: all seven migrations executed; ${checks} PostgreSQL merge, idempotency, ownership, RLS, tombstone and conflict checks passed.`);
+  console.log(`PASS: all eight migrations executed; ${checks} PostgreSQL merge, idempotency, ownership, RLS, tombstone and conflict checks passed.`);
 } finally { await db.close(); }

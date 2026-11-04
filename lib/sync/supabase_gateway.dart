@@ -30,10 +30,10 @@ class SupabaseSyncGateway implements SyncGateway, ConflictArchiveGateway {
         final page = await client
             .from(table)
             // Resolve new columns during the initial pull, even on empty
-            // tables, so an older server cannot silently discard new fields.
+            // tables, so an older server cannot silently discard new fields
             .select(switch (table) {
               'journal' => '*,sync_history,answer,answered_at',
-              'schedule_blocks' => '*,sync_history,description',
+              'schedule_blocks' => '*,sync_history,description,colour',
               'category_states' =>
                 '*,sync_history,included,is_baseline,changed_at',
               _ => '*,sync_history',

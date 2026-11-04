@@ -17,6 +17,23 @@ const weekdays = [
   'Sunday',
 ];
 
+extension ScheduleColourPalette on ScheduleColour {
+  Color background(Brightness brightness) => switch ((this, brightness)) {
+    (ScheduleColour.blue, Brightness.light) => const Color(0xFFDCE8F5),
+    (ScheduleColour.orange, Brightness.light) => const Color(0xFFF4E2CF),
+    (ScheduleColour.green, Brightness.light) => const Color(0xFFDDEBDD),
+    (ScheduleColour.red, Brightness.light) => const Color(0xFFF2DDDF),
+    (ScheduleColour.blue, Brightness.dark) => const Color(0xFF293E56),
+    (ScheduleColour.orange, Brightness.dark) => const Color(0xFF513D2B),
+    (ScheduleColour.green, Brightness.dark) => const Color(0xFF2D4536),
+    (ScheduleColour.red, Brightness.dark) => const Color(0xFF513237),
+  };
+
+  Color foreground(Brightness brightness) => brightness == Brightness.dark
+      ? const Color(0xFFF4F4F4)
+      : const Color(0xFF202830);
+}
+
 class ScheduleScreen extends ConsumerStatefulWidget {
   final bool active;
   final DateTime Function()? clock;
@@ -117,6 +134,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
     final study = ref.watch(studyProvider),
         blocks = study.repository.schedule(day);
     final start = startMinute(blocks), scheme = Theme.of(context).colorScheme;
+    final brightness = Theme.of(context).brightness;
     final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
     final placements = layoutSchedule(blocks);
     return Padding(
@@ -235,9 +253,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
                                 message:
                                     '${p.block.title}\n${WallTime.label(p.block.startMinute)}-${WallTime.label(p.block.endMinute)}${p.block.description == null ? '' : '\n${p.block.description}'}',
                                 child: Material(
-                                  color: scheme.primaryContainer.withValues(
-                                    alpha: .75,
-                                  ),
+                                  color: p.block.colour.background(brightness),
                                   borderRadius: BorderRadius.circular(7),
                                   clipBehavior: Clip.antiAlias,
                                   child: InkWell(
@@ -269,8 +285,10 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
                                                     style: TextStyle(
                                                       fontWeight:
                                                           FontWeight.w600,
-                                                      color: scheme
-                                                          .onPrimaryContainer,
+                                                      color: p.block.colour
+                                                          .foreground(
+                                                            brightness,
+                                                          ),
                                                     ),
                                                   ),
                                                   if (box.maxHeight >=
@@ -280,9 +298,17 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
                                                       maxLines: 1,
                                                       overflow:
                                                           TextOverflow.ellipsis,
-                                                      style: Theme.of(
-                                                        context,
-                                                      ).textTheme.bodySmall,
+                                                      style: Theme.of(context)
+                                                          .textTheme
+                                                          .bodySmall
+                                                          ?.copyWith(
+                                                            color: p
+                                                                .block
+                                                                .colour
+                                                                .foreground(
+                                                                  brightness,
+                                                                ),
+                                                          ),
                                                     ),
                                                   if (box.maxHeight >=
                                                           82 * textScale &&
@@ -303,10 +329,11 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
                                                           .textTheme
                                                           .bodySmall
                                                           ?.copyWith(
-                                                            color: scheme
-                                                                .onPrimaryContainer
-                                                                .withValues(
-                                                                  alpha: .75,
+                                                            color: p
+                                                                .block
+                                                                .colour
+                                                                .foreground(
+                                                                  brightness,
                                                                 ),
                                                           ),
                                                     ),
@@ -407,6 +434,7 @@ class _ScheduleEditorState extends ConsumerState<ScheduleEditor> {
         text: WallTime.label(widget.block?.endMinute ?? 600),
       );
   late int weekday = widget.block?.weekday ?? widget.weekday;
+  late ScheduleColour colour = widget.block?.colour ?? ScheduleColour.blue;
   String? error;
   @override
   void dispose() {
@@ -419,74 +447,126 @@ class _ScheduleEditorState extends ConsumerState<ScheduleEditor> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    scrollable: true,
     title: Text(
       widget.block == null ? 'Add schedule block' : 'Edit schedule block',
     ),
     content: SizedBox(
       width: 380,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: title,
-              autofocus: true,
-              maxLength: 120,
-              decoration: const InputDecoration(labelText: 'Title'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: title,
+            autofocus: true,
+            maxLength: 120,
+            decoration: const InputDecoration(labelText: 'Title'),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<int>(
+            initialValue: weekday,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Weekday'),
+            items: [
+              for (var d = 1; d <= 7; d++)
+                DropdownMenuItem(value: d, child: Text(weekdays[d - 1])),
+            ],
+            onChanged: (v) => setState(() => weekday = v!),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: start,
+                  keyboardType: TextInputType.datetime,
+                  decoration: const InputDecoration(labelText: 'Start · HH:MM'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: end,
+                  keyboardType: TextInputType.datetime,
+                  decoration: const InputDecoration(labelText: 'End · HH:MM'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: description,
+            minLines: 1,
+            maxLines: 3,
+            maxLength: 2000,
+            decoration: const InputDecoration(
+              labelText: 'Description (optional)',
             ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<int>(
-              initialValue: weekday,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Weekday'),
-              items: [
-                for (var d = 1; d <= 7; d++)
-                  DropdownMenuItem(value: d, child: Text(weekdays[d - 1])),
-              ],
-              onChanged: (v) => setState(() => weekday = v!),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: start,
-                    keyboardType: TextInputType.datetime,
-                    decoration: const InputDecoration(
-                      labelText: 'Start · HH:MM',
+          ),
+          const SizedBox(height: 8),
+          const Align(alignment: Alignment.centerLeft, child: Text('Colour')),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              for (final option in ScheduleColour.values)
+                Semantics(
+                  label: option.label,
+                  button: true,
+                  selected: colour == option,
+                  child: Tooltip(
+                    message: option.label,
+                    excludeFromSemantics: true,
+                    child: InkResponse(
+                      key: ValueKey('schedule-colour-${option.name}'),
+                      onTap: () => setState(() => colour = option),
+                      radius: 24,
+                      child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: Center(
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: option.background(
+                                Theme.of(context).brightness,
+                              ),
+                              border: Border.all(
+                                color: option
+                                    .foreground(Theme.of(context).brightness)
+                                    .withValues(
+                                      alpha: colour == option ? .75 : .2,
+                                    ),
+                                width: colour == option ? 2 : 1,
+                              ),
+                            ),
+                            child: colour == option
+                                ? Icon(
+                                    Icons.check,
+                                    size: 18,
+                                    color: option.foreground(
+                                      Theme.of(context).brightness,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: end,
-                    keyboardType: TextInputType.datetime,
-                    decoration: const InputDecoration(labelText: 'End · HH:MM'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: description,
-              minLines: 1,
-              maxLines: 3,
-              maxLength: 2000,
-              decoration: const InputDecoration(
-                labelText: 'Description (optional)',
+            ],
+          ),
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),
-            if (error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
-          ],
-        ),
+        ],
       ),
     ),
     actions: [
@@ -527,6 +607,7 @@ class _ScheduleEditorState extends ConsumerState<ScheduleEditor> {
               startMinute: WallTime.parse(start.text),
               endMinute: WallTime.parse(end.text),
               description: description.text,
+              colour: colour,
             );
             block.validate();
             final c = ref.read(studyProvider);

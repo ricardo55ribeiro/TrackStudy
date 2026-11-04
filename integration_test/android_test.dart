@@ -24,9 +24,46 @@ import '../test/support/android_drawer_acceptance.dart';
 import '../test/support/todo_acceptance.dart';
 import '../test/support/topic_reordering.dart';
 import '../test/support/lifecycle_acceptance.dart';
+import '../test/support/schedule_colours.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('native schedule colour add, edit and cancel', (tester) async {
+    await exerciseScheduleColours(tester);
+  });
+  testWidgets('Android native SQLite retains all colours after reopen', (
+    tester,
+  ) async {
+    final support = await getApplicationSupportDirectory();
+    final directory = await Directory(
+      '${support.path}/colours-${const Uuid().v4()}',
+    ).create();
+    final path = '${directory.path}/study.sqlite';
+    var repository = LocalStudyRepository(StudyDatabase(sqlite3.open(path)));
+    try {
+      for (final colour in ScheduleColour.values) {
+        repository.saveSchedule(
+          ScheduleBlock(
+            id: const Uuid().v4(),
+            title: colour.label,
+            weekday: 1,
+            startMinute: 540,
+            endMinute: 600,
+            colour: colour,
+          ),
+        );
+      }
+      repository.close();
+      repository = LocalStudyRepository(StudyDatabase(sqlite3.open(path)));
+      expect(
+        repository.schedule(1).map((b) => b.colour).toSet(),
+        ScheduleColour.values.toSet(),
+      );
+    } finally {
+      repository.close();
+      await directory.delete(recursive: true);
+    }
+  });
   testWidgets(
     'Android native encrypted session persists across storage instances',
     (tester) async {
@@ -102,6 +139,7 @@ void main() {
           id: scheduleId,
           title: 'Windows schedule',
           description: 'V0.04',
+          colour: ScheduleColour.green,
           weekday: 1,
           startMinute: 510,
           endMinute: 600,
@@ -171,6 +209,7 @@ void main() {
         expect(phone.journal('').single.learned, 'Windows journal');
         expect(phone.journal('').single.answer, 'Windows answer');
         expect(phone.schedule(1).single.description, 'V0.04');
+        expect(phone.schedule(1).single.colour, ScheduleColour.green);
         expect(phone.review(week).wins, ['One', 'Two', 'Three']);
         expect(phone.schedule(1).single.id, scheduleId);
         expect(
@@ -201,6 +240,17 @@ void main() {
         await syncWindows();
         expect(progress(windows, 'Research').total, 100);
         cloud.offline = true;
+        phone.saveSchedule(
+          ScheduleBlock(
+            id: scheduleId,
+            title: 'Windows schedule',
+            description: 'V0.04',
+            weekday: 1,
+            startMinute: 510,
+            endMinute: 600,
+            colour: ScheduleColour.red,
+          ),
+        );
         phone.commit(progress(phone, 'Research').goalId, 100, week);
         expect(progress(phone, 'Research').total, 200);
         await tester.pump(const Duration(seconds: 3));
@@ -211,6 +261,7 @@ void main() {
         expect(phoneStore.pending, 0);
         await syncWindows();
         expect(progress(windows, 'Research').total, 200);
+        expect(windows.schedule(1).single.colour, ScheduleColour.red);
         phone.saveAcademicEvent(
           AcademicEvent(
             id: eventId,
@@ -228,12 +279,14 @@ void main() {
             startMinute: 510,
             endMinute: 600,
             description: 'Room B',
+            colour: phone.schedule(1).single.colour,
           ),
         );
         await tester.pump(const Duration(seconds: 3));
         await syncWindows();
         expect(windows.journal('').single.answer, 'Phone answer');
         expect(windows.schedule(1).single.description, 'Room B');
+        expect(windows.schedule(1).single.colour, ScheduleColour.red);
         expect(
           windows.academicEvents(DateTime(2026, 10)).single.title,
           'Phone exam edit',

@@ -136,7 +136,7 @@ void main() {
       final s = SyncStore(r.database);
       s.bind(account, project);
       r.db.execute(
-        'DROP TABLE category_states; DROP TABLE todo_tasks; DROP TABLE todo_topics; PRAGMA user_version=6',
+        'DROP TABLE category_states; DROP TABLE todo_tasks; DROP TABLE todo_topics; ALTER TABLE schedule_blocks DROP COLUMN colour; PRAGMA user_version=6',
       );
       final tables = r.db
           .select("SELECT name FROM sqlite_master WHERE type='table'")
