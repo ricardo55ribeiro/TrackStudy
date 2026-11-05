@@ -52,7 +52,7 @@ void main() {
       final raw = repo.database.handle;
       repo.deleteSchedule(repo.schedule(1).first.id);
       raw.execute(
-        'ALTER TABLE schedule_blocks DROP COLUMN colour; PRAGMA user_version=8',
+        'ALTER TABLE schedule_blocks DROP COLUMN colour; ALTER TABLE academic_events DROP COLUMN colour; PRAGMA user_version=8',
       );
       List<Map<String, Object?>> rows(String table) => raw
           .select('SELECT * FROM $table')
@@ -64,7 +64,10 @@ void main() {
           table: rows(table),
       };
       StudyDatabase(raw);
-      expect(raw.select('PRAGMA user_version').single.values.single, 9);
+      expect(
+        raw.select('PRAGMA user_version').single.values.single,
+        StudyDatabase.version,
+      );
       expect(
         rows('schedule_blocks'),
         before.map((r) => {...r, 'colour': 'blue'}).toList(),
@@ -103,7 +106,7 @@ void main() {
   });
 
   test(
-    'backup 7 preserves colours, formats 3-6 default missing colours and invalid values are atomic',
+    'backup 8 preserves colours, formats 3-6 default missing colours and invalid values are atomic',
     () {
       final source = memory(), target = memory();
       addTearDown(source.close);
@@ -112,7 +115,7 @@ void main() {
         source.saveSchedule(colouredBlock(colour));
       }
       final backup = source.exportJson();
-      expect(jsonDecode(backup)['version'], 7);
+      expect(jsonDecode(backup)['version'], 8);
       target.restoreJson(backup);
       expect(
         target.schedule(1).map((b) => b.colour).toSet(),
@@ -125,7 +128,7 @@ void main() {
           row.remove('colour');
         }
         target.restoreJson(jsonEncode(legacy));
-        expect(target.schedule(1), hasLength(4));
+        expect(target.schedule(1), hasLength(5));
         expect(
           target.schedule(1).every((b) => b.colour == ScheduleColour.blue),
           isTrue,

@@ -204,7 +204,7 @@ WHERE deleted_at IS NULL AND topic_id IN (SELECT id FROM todo_topics WHERE delet
   }
 
   void _applyRow(String table, SyncRow remote, String account) {
-    if (table == 'schedule_blocks') {
+    if (table == 'schedule_blocks' || table == 'academic_events') {
       ScheduleColour.parse(remote['colour']);
     }
     if (remote['user_id'] != account) {

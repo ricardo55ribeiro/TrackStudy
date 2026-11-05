@@ -52,7 +52,8 @@ enum ScheduleColour {
   blue,
   orange,
   green,
-  red;
+  red,
+  black;
 
   String get label => '${name[0].toUpperCase()}${name.substring(1)}';
 
@@ -60,7 +61,7 @@ enum ScheduleColour {
     for (final colour in values) {
       if (colour.name == value) return colour;
     }
-    throw const FormatException('Invalid schedule colour');
+    throw const FormatException('Invalid planning colour');
   }
 }
 
@@ -137,12 +138,14 @@ enum AcademicType {
 class AcademicEvent {
   final String id, title, date, note;
   final AcademicType type;
+  final ScheduleColour colour;
   const AcademicEvent({
     required this.id,
     required this.title,
     required this.date,
     required this.type,
     this.note = '',
+    this.colour = ScheduleColour.blue,
   });
   void validate() {
     LocalDate.parse(date);
@@ -159,6 +162,7 @@ class AcademicEvent {
     'event_date': date,
     'event_type': type.name,
     'note': note.trim(),
+    'colour': colour.name,
   };
   factory AcademicEvent.fromMap(Map<String, Object?> row) => AcademicEvent(
     id: row['id'] as String,
@@ -166,6 +170,9 @@ class AcademicEvent {
     date: row['event_date'] as String,
     type: AcademicType.values.byName(row['event_type'] as String),
     note: row['note'] as String,
+    colour: ScheduleColour.parse(
+      row.containsKey('colour') ? row['colour'] : 'blue',
+    ),
   );
 }
 

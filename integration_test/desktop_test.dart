@@ -21,9 +21,15 @@ import '../test/support/todo_acceptance.dart';
 import '../test/support/topic_reordering.dart';
 import '../test/support/lifecycle_acceptance.dart';
 import '../test/support/schedule_colours.dart';
+import '../test/support/monthly_colours.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('native monthly colours, indicators, editing and deletion', (
+    tester,
+  ) async {
+    await exerciseMonthlyColours(tester, phone: false);
+  });
   testWidgets('native schedule colour add, edit and cancel', (tester) async {
     await exerciseScheduleColours(tester);
   });
@@ -175,7 +181,7 @@ void main() {
           id: const Uuid().v4(),
           title: 'Native Gym',
           description: 'V0.04',
-          colour: ScheduleColour.green,
+          colour: ScheduleColour.black,
           weekday: 1,
           startMinute: 510,
           endMinute: 600,
@@ -196,6 +202,7 @@ void main() {
         AcademicEvent(
           id: const Uuid().v4(),
           title: 'Native Exam',
+          colour: ScheduleColour.black,
           date: '2026-10-29',
           type: AcademicType.exam,
         ),
@@ -217,7 +224,11 @@ void main() {
       ]);
       expect(repository.todoTasks(todoTopic).first.completed, isTrue);
       expect(repository.schedule(1).single.description, 'V0.04');
-      expect(repository.schedule(1).single.colour, ScheduleColour.green);
+      expect(
+        repository.academicEvents(DateTime(2026, 10)).single.colour,
+        ScheduleColour.black,
+      );
+      expect(repository.schedule(1).single.colour, ScheduleColour.black);
       expect(repository.journal('').single.answer, 'Native answer');
       expect(
         repository.preference('tab.order', ''),

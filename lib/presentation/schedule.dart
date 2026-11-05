@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../application/study_controller.dart';
 import '../domain/planning.dart';
 import 'common.dart';
+import 'planning_colours.dart';
 
 const weekdays = [
   'Monday',
@@ -16,23 +17,6 @@ const weekdays = [
   'Saturday',
   'Sunday',
 ];
-
-extension ScheduleColourPalette on ScheduleColour {
-  Color background(Brightness brightness) => switch ((this, brightness)) {
-    (ScheduleColour.blue, Brightness.light) => const Color(0xFFDCE8F5),
-    (ScheduleColour.orange, Brightness.light) => const Color(0xFFF4E2CF),
-    (ScheduleColour.green, Brightness.light) => const Color(0xFFDDEBDD),
-    (ScheduleColour.red, Brightness.light) => const Color(0xFFF2DDDF),
-    (ScheduleColour.blue, Brightness.dark) => const Color(0xFF293E56),
-    (ScheduleColour.orange, Brightness.dark) => const Color(0xFF513D2B),
-    (ScheduleColour.green, Brightness.dark) => const Color(0xFF2D4536),
-    (ScheduleColour.red, Brightness.dark) => const Color(0xFF513237),
-  };
-
-  Color foreground(Brightness brightness) => brightness == Brightness.dark
-      ? const Color(0xFFF4F4F4)
-      : const Color(0xFF202830);
-}
 
 class ScheduleScreen extends ConsumerStatefulWidget {
   final bool active;
@@ -503,60 +487,10 @@ class _ScheduleEditorState extends ConsumerState<ScheduleEditor> {
               labelText: 'Description (optional)',
             ),
           ),
-          const SizedBox(height: 8),
-          const Align(alignment: Alignment.centerLeft, child: Text('Colour')),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              for (final option in ScheduleColour.values)
-                Semantics(
-                  label: option.label,
-                  button: true,
-                  selected: colour == option,
-                  child: Tooltip(
-                    message: option.label,
-                    excludeFromSemantics: true,
-                    child: InkResponse(
-                      key: ValueKey('schedule-colour-${option.name}'),
-                      onTap: () => setState(() => colour = option),
-                      radius: 24,
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Center(
-                          child: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: option.background(
-                                Theme.of(context).brightness,
-                              ),
-                              border: Border.all(
-                                color: option
-                                    .foreground(Theme.of(context).brightness)
-                                    .withValues(
-                                      alpha: colour == option ? .75 : .2,
-                                    ),
-                                width: colour == option ? 2 : 1,
-                              ),
-                            ),
-                            child: colour == option
-                                ? Icon(
-                                    Icons.check,
-                                    size: 18,
-                                    color: option.foreground(
-                                      Theme.of(context).brightness,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+          PlanningColourSelector(
+            colour: colour,
+            keyPrefix: 'schedule',
+            onChanged: (value) => setState(() => colour = value),
           ),
           if (error != null)
             Padding(

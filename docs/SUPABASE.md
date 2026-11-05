@@ -14,8 +14,13 @@ On a new project, run these migrations in order through Supabase's SQL Editor:
 6. [006_todo_list.sql](../supabase/migrations/006_todo_list.sql)
 7. [007_progress_bar_archiving.sql](../supabase/migrations/007_progress_bar_archiving.sql)
 8. [008_schedule_block_colours.sql](../supabase/migrations/008_schedule_block_colours.sql)
+9. [009_monthly_event_colours.sql](../supabase/migrations/009_monthly_event_colours.sql)
 
-For an existing project, apply only missing migrations. Do not rerun applied migrations or remove existing tables. Version 1.6.0 requires all eight for synchronization. Installing first is safe for local use, but synchronization waits until the schema is available.
+For an existing project, apply only missing migrations. Do not rerun applied migrations or remove existing tables. Version 1.7.0 requires all nine for synchronization. Installing first is safe for local use, but synchronization waits until the schema is available.
+
+For Monthly View colours and Black, apply `supabase/migrations/009_monthly_event_colours.sql` once after 008. It adds academic event colours, extends the schedule colour constraint and preserves existing colours, sync histories, RLS and all causal merge rules. Omitted colours from older clients preserve existing values and default new records to Blue. Version 1.7.0 checks the academic colour column before applying any pull or uploading changes, so an unprepared cloud leaves local edits safe and pending.
+
+Upgrade every syncing Windows and Android installation to **1.7.0 or newer before saving Black schedule blocks**. Version 1.6.0 validates only four schedule colours and cannot synchronize a Black block. Server-side omission compatibility cannot make that older parser understand Black. Installing 1.7.0 first is safe for local use; after applying 009, retry **Sync now** on each device. Backup format 8 also requires an updated app for restore. This release does not access or migrate a live project automatically.
 
 For Daily Schedule colours, apply `supabase/migrations/008_schedule_block_colours.sql` once after 007. It adds the validated `colour` field with a Blue default and replaces `public.trackstudy_merge` while preserving the earlier causal and category-archiving rules. Older clients that omit colour preserve the stored value on updates and create Blue blocks. Updated clients explicitly check the new column before applying cloud data or uploading changes, including when the cloud table is empty. After applying the migration, retry **Sync now**. This release does not apply SQL automatically.
 

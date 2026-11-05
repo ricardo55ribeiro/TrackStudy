@@ -15,6 +15,7 @@ void main() {
     'category_states',
     'journal',
     'schedule_blocks',
+    'academic_events',
     'todo_topics',
     'todo_tasks',
   ]) {
@@ -48,7 +49,16 @@ void main() {
             startMinute: 510,
             endMinute: 600,
             description: 'Keep this room',
-            colour: ScheduleColour.red,
+            colour: ScheduleColour.black,
+          ),
+        );
+        repo.saveAcademicEvent(
+          AcademicEvent(
+            id: lesson().id,
+            title: 'Keep event',
+            date: '2026-11-05',
+            type: AcademicType.exam,
+            colour: ScheduleColour.black,
           ),
         );
         final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -64,7 +74,10 @@ void main() {
               contains(
                 missingTable == 'journal'
                     ? 'answered_at'
-                    : missingTable == 'schedule_blocks'
+                    : [
+                        'schedule_blocks',
+                        'academic_events',
+                      ].contains(missingTable)
                     ? 'colour'
                     : 'sync_history',
               ),
@@ -102,8 +115,12 @@ void main() {
         );
         expect(repo.journal('').single.answer, 'Keep this answer');
         expect(repo.schedule(1).single.description, 'Keep this room');
-        expect(repo.schedule(1).single.colour, ScheduleColour.red);
+        expect(repo.schedule(1).single.colour, ScheduleColour.black);
         expect(repo.todoTasks(topic).single.text, 'Keep this task');
+        expect(
+          repo.academicEvents(DateTime(2026, 11)).single.colour,
+          ScheduleColour.black,
+        );
       },
     );
   }

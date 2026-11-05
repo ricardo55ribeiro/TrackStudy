@@ -7,6 +7,7 @@ import 'package:trackstudy/data/database.dart';
 import 'package:trackstudy/data/local_repository.dart';
 import 'package:trackstudy/domain/planning.dart';
 import 'package:trackstudy/presentation/schedule.dart';
+import 'package:trackstudy/presentation/planning_colours.dart';
 
 Finder swatch(ScheduleColour colour) =>
     find.byKey(ValueKey('schedule-colour-${colour.name}'));

@@ -34,6 +34,7 @@ class SupabaseSyncGateway implements SyncGateway, ConflictArchiveGateway {
             .select(switch (table) {
               'journal' => '*,sync_history,answer,answered_at',
               'schedule_blocks' => '*,sync_history,description,colour',
+              'academic_events' => '*,sync_history,colour',
               'category_states' =>
                 '*,sync_history,included,is_baseline,changed_at',
               _ => '*,sync_history',

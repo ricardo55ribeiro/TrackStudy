@@ -25,9 +25,15 @@ import '../test/support/todo_acceptance.dart';
 import '../test/support/topic_reordering.dart';
 import '../test/support/lifecycle_acceptance.dart';
 import '../test/support/schedule_colours.dart';
+import '../test/support/monthly_colours.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('native monthly colours, indicators, editing and deletion', (
+    tester,
+  ) async {
+    await exerciseMonthlyColours(tester, phone: true);
+  });
   testWidgets('native schedule colour add, edit and cancel', (tester) async {
     await exerciseScheduleColours(tester);
   });
@@ -53,10 +59,28 @@ void main() {
           ),
         );
       }
+      for (final colour in ScheduleColour.values) {
+        repository.saveAcademicEvent(
+          AcademicEvent(
+            id: const Uuid().v4(),
+            title: colour.label,
+            date: '2026-11-05',
+            type: AcademicType.exam,
+            colour: colour,
+          ),
+        );
+      }
       repository.close();
       repository = LocalStudyRepository(StudyDatabase(sqlite3.open(path)));
       expect(
         repository.schedule(1).map((b) => b.colour).toSet(),
+        ScheduleColour.values.toSet(),
+      );
+      expect(
+        repository
+            .academicEvents(DateTime(2026, 11))
+            .map((e) => e.colour)
+            .toSet(),
         ScheduleColour.values.toSet(),
       );
     } finally {
@@ -139,7 +163,7 @@ void main() {
           id: scheduleId,
           title: 'Windows schedule',
           description: 'V0.04',
-          colour: ScheduleColour.green,
+          colour: ScheduleColour.black,
           weekday: 1,
           startMinute: 510,
           endMinute: 600,
@@ -149,6 +173,7 @@ void main() {
         AcademicEvent(
           id: eventId,
           title: 'Windows exam',
+          colour: ScheduleColour.black,
           date: '2026-10-07',
           type: AcademicType.exam,
         ),
@@ -209,7 +234,7 @@ void main() {
         expect(phone.journal('').single.learned, 'Windows journal');
         expect(phone.journal('').single.answer, 'Windows answer');
         expect(phone.schedule(1).single.description, 'V0.04');
-        expect(phone.schedule(1).single.colour, ScheduleColour.green);
+        expect(phone.schedule(1).single.colour, ScheduleColour.black);
         expect(phone.review(week).wins, ['One', 'Two', 'Three']);
         expect(phone.schedule(1).single.id, scheduleId);
         expect(
@@ -240,6 +265,15 @@ void main() {
         await syncWindows();
         expect(progress(windows, 'Research').total, 100);
         cloud.offline = true;
+        phone.saveAcademicEvent(
+          AcademicEvent(
+            id: eventId,
+            title: 'Windows exam',
+            date: '2026-10-07',
+            type: AcademicType.exam,
+            colour: ScheduleColour.green,
+          ),
+        );
         phone.saveSchedule(
           ScheduleBlock(
             id: scheduleId,
@@ -262,10 +296,15 @@ void main() {
         await syncWindows();
         expect(progress(windows, 'Research').total, 200);
         expect(windows.schedule(1).single.colour, ScheduleColour.red);
+        expect(
+          windows.academicEvents(DateTime(2026, 10)).single.colour,
+          ScheduleColour.green,
+        );
         phone.saveAcademicEvent(
           AcademicEvent(
             id: eventId,
             title: 'Phone exam edit',
+            colour: ScheduleColour.red,
             date: '2026-10-07',
             type: AcademicType.exam,
           ),
@@ -327,6 +366,10 @@ void main() {
         expect(SyncStore(phone.database).pending, 0);
         expect(SyncStore(phone.database).meta('account'), account);
         expect(phone.journal('').single.answer, 'Phone answer');
+        expect(
+          phone.academicEvents(DateTime(2026, 10)).single.colour,
+          ScheduleColour.red,
+        );
         expect(
           phone.todoTasks(phone.todoTopics().single.id).map((t) => t.text),
           ['Native A', 'Native B', 'Native C'],

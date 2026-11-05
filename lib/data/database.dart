@@ -9,7 +9,7 @@ class StudyDatabase {
     handle.execute('PRAGMA synchronous = FULL');
     migrate();
   }
-  static const version = 9;
+  static const version = 10;
   void transaction(void Function() action) {
     handle.execute('BEGIN IMMEDIATE');
     try {
@@ -279,6 +279,33 @@ END;
         handle.execute(
           "ALTER TABLE schedule_blocks ADD COLUMN colour TEXT NOT NULL DEFAULT 'blue' CHECK(colour IN ('blue','orange','green','red'))",
         );
+      }
+      if (old < 10) {
+        final schema = handle
+            .select(
+              "SELECT sql FROM sqlite_master WHERE tbl_name='schedule_blocks' AND type IN ('index','trigger') AND sql IS NOT NULL ORDER BY type,name",
+            )
+            .map((row) => row['sql'] as String)
+            .toList();
+        // Copy before installing triggers so replication stamps remain untouched
+        handle.execute("""
+CREATE TABLE schedule_blocks_next (
+ id TEXT PRIMARY KEY, title TEXT NOT NULL CHECK(length(trim(title)) BETWEEN 1 AND 120),
+ weekday INTEGER NOT NULL CHECK(weekday BETWEEN 1 AND 7),
+ start_minute INTEGER NOT NULL CHECK(typeof(start_minute)='integer' AND start_minute>=0 AND start_minute<1440),
+ end_minute INTEGER NOT NULL CHECK(typeof(end_minute)='integer' AND end_minute>start_minute AND end_minute<=1440),
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
+ description TEXT CHECK(description IS NULL OR length(description)<=2000),
+ colour TEXT NOT NULL DEFAULT 'blue' CHECK(colour IN ('blue','orange','green','red','black'))
+);
+INSERT INTO schedule_blocks_next SELECT id,title,weekday,start_minute,end_minute,created_at,updated_at,deleted_at,description,colour FROM schedule_blocks;
+DROP TABLE schedule_blocks;
+ALTER TABLE schedule_blocks_next RENAME TO schedule_blocks;
+ALTER TABLE academic_events ADD COLUMN colour TEXT NOT NULL DEFAULT 'blue' CHECK(colour IN ('blue','orange','green','red','black'));
+""");
+        for (final sql in schema) {
+          handle.execute(sql);
+        }
       }
       handle.execute('PRAGMA user_version = $version');
     });

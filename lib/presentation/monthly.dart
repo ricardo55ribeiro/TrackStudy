@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../application/study_controller.dart';
 import '../domain/planning.dart';
 import 'common.dart';
+import 'planning_colours.dart';
 import 'schedule.dart' show weekdays;
 
 class MonthlyScreen extends ConsumerStatefulWidget {
@@ -31,6 +32,7 @@ class _MonthlyScreenState extends ConsumerState<MonthlyScreen> {
         cells = LocalDate.monthCells(month);
     final today = LocalDate.key(DateTime.now());
     final phone = phoneLayout(context);
+    final brightness = Theme.of(context).brightness;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         pageInset(context, desktop: 28),
@@ -194,21 +196,77 @@ class _MonthlyScreenState extends ConsumerState<MonthlyScreen> {
                                             ),
                                             const SizedBox(height: 4),
                                             if (phone && dayEvents.isNotEmpty)
-                                              Container(
-                                                margin: const EdgeInsets.only(
+                                              Padding(
+                                                padding: const EdgeInsets.only(
                                                   top: 3,
                                                 ),
-                                                height: 4,
-                                                width: double.infinity,
-                                                decoration: BoxDecoration(
-                                                  color: scheme.primary,
-                                                  borderRadius:
-                                                      BorderRadius.circular(2),
+                                                child: SizedBox(
+                                                  height: 6,
+                                                  child: Row(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .stretch,
+                                                    children: [
+                                                      for (final colour
+                                                          in ScheduleColour
+                                                              .values
+                                                              .where(
+                                                                (
+                                                                  colour,
+                                                                ) => dayEvents.any(
+                                                                  (e) =>
+                                                                      e.colour ==
+                                                                      colour,
+                                                                ),
+                                                              ))
+                                                        Expanded(
+                                                          child: Container(
+                                                            key: ValueKey(
+                                                              'event-indicator-$key-${colour.name}',
+                                                            ),
+                                                            margin:
+                                                                const EdgeInsets.symmetric(
+                                                                  horizontal:
+                                                                      .5,
+                                                                ),
+                                                            decoration: BoxDecoration(
+                                                              color: colour
+                                                                  .background(
+                                                                    brightness,
+                                                                  ),
+                                                              border: Border.all(
+                                                                color: colour
+                                                                    .foreground(
+                                                                      brightness,
+                                                                    )
+                                                                    .withValues(
+                                                                      alpha: .4,
+                                                                    ),
+                                                                width: .5,
+                                                              ),
+                                                              borderRadius:
+                                                                  BorderRadius.circular(
+                                                                    2,
+                                                                  ),
+                                                            ),
+                                                            child: Semantics(
+                                                              label:
+                                                                  colour.label,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                    ],
+                                                  ),
                                                 ),
                                               ),
                                             if (phone && dayEvents.isNotEmpty)
                                               Text(
                                                 '${dayEvents.length}',
+                                                key: ValueKey(
+                                                  'event-count-$key',
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
                                                   fontSize: 11,
                                                   color: scheme.primary,
@@ -228,6 +286,9 @@ class _MonthlyScreenState extends ConsumerState<MonthlyScreen> {
                                                     onTap: () =>
                                                         edit(event: event),
                                                     child: Container(
+                                                      key: ValueKey(
+                                                        'event-badge-${event.id}',
+                                                      ),
                                                       width: double.infinity,
                                                       padding:
                                                           const EdgeInsets.symmetric(
@@ -235,8 +296,10 @@ class _MonthlyScreenState extends ConsumerState<MonthlyScreen> {
                                                             vertical: 3,
                                                           ),
                                                       decoration: BoxDecoration(
-                                                        color: scheme
-                                                            .secondaryContainer,
+                                                        color: event.colour
+                                                            .background(
+                                                              brightness,
+                                                            ),
                                                         borderRadius:
                                                             BorderRadius.circular(
                                                               4,
@@ -249,8 +312,10 @@ class _MonthlyScreenState extends ConsumerState<MonthlyScreen> {
                                                             .ellipsis,
                                                         style: TextStyle(
                                                           fontSize: 12,
-                                                          color: scheme
-                                                              .onSecondaryContainer,
+                                                          color: event.colour
+                                                              .foreground(
+                                                                brightness,
+                                                              ),
                                                         ),
                                                       ),
                                                     ),
@@ -294,6 +359,13 @@ class _MonthlyScreenState extends ConsumerState<MonthlyScreen> {
                             .academicEvents(selected)
                             .where((e) => e.date == LocalDate.key(selected)))
                       ListTile(
+                        key: ValueKey('event-details-${event.id}'),
+                        leading: PlanningColourMarker(
+                          key: ValueKey('event-marker-${event.id}'),
+                          colour: event.colour,
+                        ),
+                        minLeadingWidth: 14,
+                        horizontalTitleGap: 12,
                         contentPadding: EdgeInsets.zero,
                         title: Text(event.title),
                         subtitle: Text(
@@ -327,6 +399,7 @@ class _AcademicEditorState extends ConsumerState<AcademicEditor> {
       date = TextEditingController(
         text: widget.event?.date ?? LocalDate.key(widget.date),
       );
+  late ScheduleColour colour = widget.event?.colour ?? ScheduleColour.blue;
   late AcademicType type = widget.event?.type ?? AcademicType.other;
   String? error;
   @override
@@ -339,74 +412,78 @@ class _AcademicEditorState extends ConsumerState<AcademicEditor> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    scrollable: true,
     title: Text(
       widget.event == null ? 'Add academic event' : 'Edit academic event',
     ),
     content: SizedBox(
       width: 420,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: title,
-              autofocus: true,
-              maxLength: 120,
-              decoration: const InputDecoration(labelText: 'Title'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: date,
-              keyboardType: TextInputType.datetime,
-              decoration: InputDecoration(
-                labelText: 'Date · YYYY-MM-DD',
-                suffixIcon: IconButton(
-                  tooltip: 'Choose date',
-                  icon: const Icon(Icons.calendar_today_outlined, size: 18),
-                  onPressed: () async {
-                    var initialDate = widget.date;
-                    try {
-                      initialDate = LocalDate.parse(date.text);
-                    } on FormatException {
-                      // An unfinished or invalid typed date must not break the picker.
-                    }
-                    final chosen = await showDatePicker(
-                      context: context,
-                      initialDate: initialDate,
-                      firstDate: DateTime(1900),
-                      lastDate: DateTime(9999, 12, 31),
-                    );
-                    if (chosen != null) date.text = LocalDate.key(chosen);
-                  },
-                ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: title,
+            autofocus: true,
+            maxLength: 120,
+            decoration: const InputDecoration(labelText: 'Title'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: date,
+            keyboardType: TextInputType.datetime,
+            decoration: InputDecoration(
+              labelText: 'Date · YYYY-MM-DD',
+              suffixIcon: IconButton(
+                tooltip: 'Choose date',
+                icon: const Icon(Icons.calendar_today_outlined, size: 18),
+                onPressed: () async {
+                  var initialDate = widget.date;
+                  try {
+                    initialDate = LocalDate.parse(date.text);
+                  } on FormatException {
+                    // An unfinished or invalid typed date must not break the picker.
+                  }
+                  final chosen = await showDatePicker(
+                    context: context,
+                    initialDate: initialDate,
+                    firstDate: DateTime(1900),
+                    lastDate: DateTime(9999, 12, 31),
+                  );
+                  if (chosen != null) date.text = LocalDate.key(chosen);
+                },
               ),
             ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<AcademicType>(
-              initialValue: type,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Type'),
-              items: [
-                for (final value in AcademicType.values)
-                  DropdownMenuItem(value: value, child: Text(value.label)),
-              ],
-              onChanged: (v) => setState(() => type = v!),
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<AcademicType>(
+            initialValue: type,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Type'),
+            items: [
+              for (final value in AcademicType.values)
+                DropdownMenuItem(value: value, child: Text(value.label)),
+            ],
+            onChanged: (v) => setState(() => type = v!),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: note,
+            maxLength: 2000,
+            minLines: 2,
+            maxLines: 4,
+            decoration: const InputDecoration(labelText: 'Note (optional)'),
+          ),
+          PlanningColourSelector(
+            colour: colour,
+            keyPrefix: 'event',
+            onChanged: (value) => setState(() => colour = value),
+          ),
+          if (error != null)
+            Text(
+              error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: note,
-              maxLength: 2000,
-              minLines: 2,
-              maxLines: 4,
-              decoration: const InputDecoration(labelText: 'Note (optional)'),
-            ),
-            if (error != null)
-              Text(
-                error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-          ],
-        ),
+        ],
       ),
     ),
     actions: [
@@ -446,6 +523,7 @@ class _AcademicEditorState extends ConsumerState<AcademicEditor> {
               date: date.text.trim(),
               type: type,
               note: note.text,
+              colour: colour,
             );
             event.validate();
             final c = ref.read(studyProvider);
