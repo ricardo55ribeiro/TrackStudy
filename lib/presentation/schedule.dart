@@ -2,21 +2,15 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../application/study_controller.dart';
 import '../domain/planning.dart';
+import '../platform/schedule_png_file.dart';
 import 'common.dart';
 import 'planning_colours.dart';
-
-const weekdays = [
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-  'Sunday',
-];
+import 'schedule_export.dart';
+import 'schedule_layout.dart';
 
 class ScheduleScreen extends ConsumerStatefulWidget {
   final bool active;
@@ -28,12 +22,12 @@ class ScheduleScreen extends ConsumerStatefulWidget {
 
 class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
     with WidgetsBindingObserver {
-  static const minuteHeight = 1.4;
   final scroll = ScrollController();
   Timer? timer;
   late DateTime now;
   late int day;
   bool foreground = true;
+  bool exporting = false;
   DateTime readClock() => (widget.clock ?? DateTime.now)();
   @override
   void initState() {
@@ -99,7 +93,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
         ? WallTime.minutes(now)
         : (blocks.firstOrNull?.startMinute ?? 480).toDouble();
     scroll.jumpTo(
-      ((focus - startMinute(blocks)) * minuteHeight - 120).clamp(
+      ((focus - startMinute(blocks)) * scheduleMinuteHeight - 120).clamp(
         0,
         scroll.position.maxScrollExtent,
       ),
@@ -113,12 +107,117 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
     super.dispose();
   }
 
+  Future<void> exportSchedule() async {
+    final options = await showDialog<ScheduleExportOptions>(
+      context: context,
+      builder: (_) => const ScheduleExportDialog(),
+    );
+    if (options == null || !mounted) return;
+
+    setState(() => exporting = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final stamp = DateFormat('yyyy-MM-dd-HHmmss', 'en_US').format(readClock());
+    try {
+      final repository = ref.read(repositoryProvider);
+      final png = await renderSchedulePng(
+        options: options,
+        blocksByDay: {
+          for (final weekday in options.days)
+            weekday: repository.schedule(weekday),
+        },
+        brightness: Theme.of(context).brightness,
+      );
+      final location = await saveSchedulePng(
+        png,
+        'trackstudy-daily-schedule-$stamp.png',
+      );
+      if (messenger.mounted && location != null) {
+        messenger.showSnackBar(SnackBar(content: Text('Saved $location')));
+      }
+    } catch (_) {
+      if (messenger.mounted) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Could not save the schedule PNG.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
+  }
+
+  Widget scheduleBlock(
+    ScheduleBlock block,
+    Brightness brightness,
+    double textScale,
+  ) {
+    final ink = block.colour.foreground(brightness);
+    final smallText = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: ink);
+    return Tooltip(
+      message:
+          '${block.title}\n${scheduleBlockTime(block)}${block.description == null ? '' : '\n${block.description}'}',
+      child: Material(
+        color: block.colour.background(brightness),
+        borderRadius: const BorderRadius.all(scheduleBlockRadius),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => showDialog<void>(
+            context: context,
+            builder: (_) => ScheduleEditor(weekday: day, block: block),
+          ),
+          child: LayoutBuilder(
+            builder: (context, box) {
+              final content = scheduleBlockContent(
+                block,
+                box.maxHeight,
+                textScale: textScale,
+              );
+              final title = content.title;
+              if (title == null) return const SizedBox();
+              return Padding(
+                padding: EdgeInsets.all(content.padding),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontWeight: FontWeight.w600, color: ink),
+                    ),
+                    if (content.time case final time?)
+                      Text(
+                        time,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: smallText,
+                      ),
+                    if (content.description case final description?)
+                      Text(
+                        description,
+                        key: ValueKey('description-${block.id}'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: smallText,
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final study = ref.watch(studyProvider),
         blocks = study.repository.schedule(day);
     final start = startMinute(blocks), scheme = Theme.of(context).colorScheme;
     final brightness = Theme.of(context).brightness;
+    final onExport = exporting ? null : exportSchedule;
     final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
     final placements = layoutSchedule(blocks);
     return Padding(
@@ -131,22 +230,45 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              children: [
+                Text(
                   'Daily Schedule',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
-              ),
-              TextButton(
-                onPressed: () => showDialog<void>(
-                  context: context,
-                  builder: (_) => ScheduleEditor(weekday: day),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: TextButton(
+                        onPressed: () => showDialog<void>(
+                          context: context,
+                          builder: (_) => ScheduleEditor(weekday: day),
+                        ),
+                        child: const Text('Add block'),
+                      ),
+                    ),
+                    if (Theme.of(context).platform == TargetPlatform.android)
+                      IconButton(
+                        tooltip: 'Export Daily Schedule',
+                        icon: const Icon(Icons.download_outlined),
+                        onPressed: onExport,
+                      )
+                    else
+                      TextButton.icon(
+                        icon: const Icon(Icons.download_outlined),
+                        onPressed: onExport,
+                        label: const Text('Export'),
+                      ),
+                  ],
                 ),
-                child: const Text('Add block'),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 6),
           const Text('Your repeating week'),
@@ -192,13 +314,13 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
                     scrollDirection: Axis.horizontal,
                     child: SizedBox(
                       width: timelineWidth,
-                      height: (1440 - start) * minuteHeight + 30,
+                      height: (1440 - start) * scheduleMinuteHeight + 30,
                       child: Stack(
                         clipBehavior: Clip.none,
                         children: [
                           for (var minute = start; minute <= 1440; minute += 60)
                             Positioned(
-                              top: (minute - start) * minuteHeight,
+                              top: (minute - start) * scheduleMinuteHeight,
                               left: 0,
                               right: 0,
                               child: Row(
@@ -223,110 +345,19 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
                                 ],
                               ),
                             ),
-                          for (final p in placements)
-                            Positioned(
-                              key: ValueKey('block-${p.block.id}'),
-                              top: (p.block.startMinute - start) * minuteHeight,
-                              left: gutter + width * p.lane / p.lanes + 3,
-                              width: math.max(1, width / p.lanes - 6),
-                              height:
-                                  (p.block.endMinute - p.block.startMinute) *
-                                      minuteHeight -
-                                  1,
-                              child: Tooltip(
-                                message:
-                                    '${p.block.title}\n${WallTime.label(p.block.startMinute)}-${WallTime.label(p.block.endMinute)}${p.block.description == null ? '' : '\n${p.block.description}'}',
-                                child: Material(
-                                  color: p.block.colour.background(brightness),
-                                  borderRadius: BorderRadius.circular(7),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: InkWell(
-                                    onTap: () => showDialog<void>(
-                                      context: context,
-                                      builder: (_) => ScheduleEditor(
-                                        weekday: day,
-                                        block: p.block,
-                                      ),
-                                    ),
-                                    child: LayoutBuilder(
-                                      builder: (context, box) => Padding(
-                                        padding: EdgeInsets.all(
-                                          box.maxHeight >= 40 * textScale
-                                              ? 8
-                                              : 0,
-                                        ),
-                                        child: box.maxHeight < 22 * textScale
-                                            ? const SizedBox()
-                                            : Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    p.block.title,
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      color: p.block.colour
-                                                          .foreground(
-                                                            brightness,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                  if (box.maxHeight >=
-                                                      58 * textScale)
-                                                    Text(
-                                                      '${WallTime.label(p.block.startMinute)}-${WallTime.label(p.block.endMinute)}',
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      style: Theme.of(context)
-                                                          .textTheme
-                                                          .bodySmall
-                                                          ?.copyWith(
-                                                            color: p
-                                                                .block
-                                                                .colour
-                                                                .foreground(
-                                                                  brightness,
-                                                                ),
-                                                          ),
-                                                    ),
-                                                  if (box.maxHeight >=
-                                                          82 * textScale &&
-                                                      (p
-                                                              .block
-                                                              .description
-                                                              ?.isNotEmpty ??
-                                                          false))
-                                                    Text(
-                                                      p.block.description!,
-                                                      key: ValueKey(
-                                                        'description-${p.block.id}',
-                                                      ),
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      style: Theme.of(context)
-                                                          .textTheme
-                                                          .bodySmall
-                                                          ?.copyWith(
-                                                            color: p
-                                                                .block
-                                                                .colour
-                                                                .foreground(
-                                                                  brightness,
-                                                                ),
-                                                          ),
-                                                    ),
-                                                ],
-                                              ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                          for (final placement in placements)
+                            Positioned.fromRect(
+                              key: ValueKey('block-${placement.block.id}'),
+                              rect: scheduleBlockBounds(
+                                placement,
+                                firstMinute: start,
+                                width: width,
+                                left: gutter,
+                              ),
+                              child: scheduleBlock(
+                                placement.block,
+                                brightness,
+                                textScale,
                               ),
                             ),
                           if (day == now.weekday)
@@ -336,7 +367,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
                               curve: Curves.linear,
                               top:
                                   (WallTime.minutes(now) - start) *
-                                  minuteHeight,
+                                  scheduleMinuteHeight,
                               left: 0,
                               right: 0,
                               child: IgnorePointer(

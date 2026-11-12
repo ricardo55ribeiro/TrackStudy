@@ -6,7 +6,7 @@ import '../application/study_controller.dart';
 import '../domain/planning.dart';
 import 'common.dart';
 import 'planning_colours.dart';
-import 'schedule.dart' show weekdays;
+import 'schedule_layout.dart' show weekdays;
 
 class MonthlyScreen extends ConsumerStatefulWidget {
   const MonthlyScreen({super.key});
