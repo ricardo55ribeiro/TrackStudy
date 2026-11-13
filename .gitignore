@@ -1,8 +1,11 @@
 .tools/
 .local/
-# Keep optional test captures local; publish only the README hero by default.
+# Keep optional test captures local and publish README images
 /docs/screenshots/*
 !/docs/screenshots/dashboard-dark.png
+!/docs/screenshots/todo-list-dark.png
+!/docs/screenshots/schedule-export-light.png
+!/docs/screenshots/schedule-export-dark.png
 .dart_tool/
 build/
 .flutter-plugins*

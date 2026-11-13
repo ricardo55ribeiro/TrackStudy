@@ -1,88 +1,52 @@
 # TrackStudy
 
-A local-first weekly tracking app for Windows and Android. Record study hours and habits, keep research notes and plan your week. No account or internet connection is required; optional Supabase synchronization keeps your devices in sync.
+TrackStudy is a study and research planner for Windows and Android. Plan your week, track progress against your goals and keep notes on what you learn. It works offline without an account, with optional sync between devices.
 
-![TrackStudy This week dashboard in dark mode, with fictional demo values](docs/screenshots/dashboard-dark.png)
+![TrackStudy on Windows showing four weekly goals and their progress](docs/screenshots/dashboard-dark.png)
 
-## Features
+## What you can do
 
-- Weekly category goals with minimums, targets, progress bars and an auditable entry history.
-- Research Journal with Learned, Question, Next and saved answers.
-- To-Do List with topics, topic and task drag reordering, a five-second completion grace period and collapsible finished tasks.
-- Weekly Review with scores derived from tracking and automatically saved drafts.
-- Recurring weekday schedules with descriptions and individual Blue, Orange, Green, Red or Black colours for blocks and monthly academic events.
-- Dark/light themes and device-local tab visibility and drag reordering.
-- Optional Windows tray mode, start at sign-in and background synchronization.
+- **See how the week is going.** Set a minimum and a target in Progress Bars, log time or counts and check earlier weeks. Weekly Review shows your totals alongside notes that save as you type.
+- **Keep track of what to do next.** Group assignments and research tasks by topic, drag them into order and check them off. In Research Journal, record what you learned, save questions and add answers as you find them.
+- **Make time for the work.** Use Daily Schedule for recurring classes and study blocks. Use Monthly View for exams, deadlines and other dated events. Both views offer five colours.
 
-Type an amount and press **Enter** or **+**. Inputs start empty and clear after a successful addition. **Undo** reverses the latest active entry; click the total beneath a bar to inspect entries. Weeks start on local calendar Mondays, and historical weeks remain available.
+![To-Do List on Windows with Statistics and Research project topics](docs/screenshots/todo-list-dark.png)
 
-In **Settings → Tabs on this device**, drag a handle to reorder any tab, including **Progress Bars**. Hold the handle first on Android. Hidden tabs retain their position and data, at least one tab stays enabled and startup opens the first enabled tab. These preferences are not synchronized.
+## Share your timetable
 
-Manage categories directly in **Progress Bars**. Click or tap a bar's name for **Edit** and **Archive**. Drag its name on Windows or hold and drag on Android to reorder active bars without handles. Inputs, progress graphics and entry-history totals keep their separate interactions. **Add Bar** stays available at the bottom, including when all bars are archived. Category management is no longer in Settings.
+Open **Daily Schedule** and use **Export** to save a PNG of the days and hours you choose. The image uses the app's current light or dark theme on Windows and Android.
 
-**Archived Bars** appears only when needed and starts collapsed. It contains compact names and Restore actions. Archiving excludes the entire current week from Progress Bars and the generated Weekly Review score while preserving all entries and undo records. Restoring includes the entire restoration week, including any progress already recorded in it. Earlier excluded weeks stay excluded. Repeated archive/restore actions in one week use the final state for that whole week. Past weeks have no management controls. Hiding Progress Bars only hides its interface and never changes category data.
+![Dark timetable export for Monday to Friday from 09:00 to 16:00](docs/screenshots/schedule-export-dark.png)
 
-**To-Do List** defaults immediately after Progress Bars, including when upgrading a customized order. Add topics with the bottom button and tasks from the right of each topic header. Click or tap a topic title or task text to open its existing edit or delete menu. Drag topic titles or active task text directly on Windows or hold and drag on Android. Topic titles move their whole group; tasks reorder only within their own topic. While dragging, complete groups move aside smoothly without drop indicators. Hold near the list edge to scroll to other topics. Check a task to save completion immediately while retaining it in place for five seconds to allow undo. Finished tasks expand independently per topic, sort by newest completion and return to the end of the active list when unchecked. See the [1.4.0 release and migration instructions](docs/TODO_LIST_RELEASE.md).
+[See the same timetable in light mode](docs/screenshots/schedule-export-light.png)
 
-## Windows
+All images use fictional study data.
 
-For development, install Flutter **3.47.5** / Dart **3.13.4**, Git and Visual Studio 2022 or Build Tools with **Desktop development with C++**, Windows SDK and CMake. Enable Windows Developer Mode for plugin symlinks.
+## Under the hood
 
-Run these PowerShell commands from the project root:
+- **Local storage.** SQLite stores each week's goal settings and individual progress entries. Changes to a goal leave earlier weeks intact. JSON restore validates the backup in a temporary database, and the app keeps a safety copy. [Storage code](lib/data/local_repository.dart) · [Data and backups](docs/DATA.md)
+- **Optional sync.** Pending edits survive app restarts and retry when a connection is available. Per-record causal histories distinguish later edits from concurrent ones. The merge picks a deterministic winner and saves conflict copies for recovery. Supabase row-level security limits cloud access to the signed-in user's records. [Sync code](lib/sync) · [Database policies](supabase/migrations)
+- **Schedule rendering.** The Flutter schedule and PNG renderer use the same rules to lay out overlapping blocks. Windows uses a Save dialog. On Android 10 and later, the app saves to Downloads. Older Android versions use the system document picker. [Schedule layout](lib/presentation/schedule_layout.dart) · [File saving](lib/platform/schedule_png_file.dart)
+
+GitHub Actions runs the Flutter unit and widget tests, Windows integration tests and local PostgreSQL checks for migrations, ownership and row-level security. The Android integration tests cover native storage and sync against a simulated cloud. [Windows workflow](.github/workflows/windows.yml) · [Integration tests](integration_test)
+
+## Get started
+
+The source is at version **1.8.1+13**. The project uses Flutter **3.47.5**.
+
+**Try the Windows build.** Open a successful Windows workflow run and sign in to download the `TrackStudy-windows-x64` artifact if it is still available. Extract the entire portable ZIP and run `trackstudy.exe`. The Releases page is currently empty. [GitHub Actions](https://github.com/ricardo55ribeiro/TrackStudy/actions) · [Windows setup](docs/WINDOWS.md)
+
+**Run from source on Windows.** Install the Windows build tools, then run these commands in PowerShell from the repository root. [Windows prerequisites](docs/WINDOWS.md#build-from-source)
 
 ```powershell
 ./tool/flutter.ps1 pub get
 ./tool/flutter.ps1 run -d windows
-./tool/package.ps1
 ```
 
-The wrapper uses Flutter on PATH, or an optional local SDK in `.tools/flutter`. Packaging creates `dist/TrackStudy-windows-x64.zip`. Extract the **whole ZIP** into a permanent folder, then run `trackstudy.exe` or double-click **Create Desktop Shortcut.bat**. The installer creates or updates a normal Desktop shortcut, supports redirected Desktops and spaces in paths and needs no administrator access.
+- **Build for Windows.** Run `./tool/package.ps1` to produce `dist/TrackStudy-windows-x64.zip`.
+- **Build for Android.** Run `./tool/package-android.ps1` on Windows to build a signed APK for Android 7.0 or later. [Android setup and signing](docs/ANDROID.md)
+- **Sync between devices.** Configure your own Supabase project, apply the migrations and sign in with the same account on both devices. [Supabase setup](docs/SUPABASE.md)
 
-Normal launch and tray **Open TrackStudy** maximize the window. In Settings, **Run in background** makes Close hide to the tray; use **Quit** to exit. **Start with Windows** starts quietly in the tray when background mode is also enabled. Quit the running app before replacing its extracted files and rerun the shortcut creator if you move its folder.
+## License
 
-For environments with extracted MSVC/SDK tools, `tool/build-portable.ps1` provides an optional local-toolchain build. The standard Visual Studio build remains supported; toolchains are not included in the app package.
-
-## Android
-
-Open the hamburger menu to switch between enabled tabs in their saved order. Selecting a tab closes the drawer and updates the title beside the menu button. Settings stays at the top right. Windows retains its horizontal tabs.
-
-Install an Android SDK and compatible JDK, then build with:
-
-```powershell
-./tool/package-android.ps1
-```
-
-Install `dist/TrackStudy-android-release.apk` on Android 7.0 or newer. Future updates must use the same package ID and signing key; install over the existing app without uninstalling. See [Android setup and signing](docs/ANDROID.md).
-
-## Optional synchronization
-
-Follow [Supabase setup](docs/SUPABASE.md), apply the SQL migrations in order and copy `.env.example` to the ignored `.env.local` with your project's HTTPS URL and publishable client key. The run/package helpers include those public client values in the build. Without configuration, TrackStudy works locally.
-
-Sign in under **Settings → Sync**. Records save locally first, synchronize when connected and retry after failures. Sign-out retains local data. Android may suspend background work; reopen the app to resume synchronization.
-
-## Data and backups
-
-**Settings → Data** shows the database location and provides JSON export/restore. The database lives separately from the executable, so replacing the app does not replace your data. Restore validates the backup before changing data and creates a safety copy. Local databases and JSON exports are not encrypted; keep them private.
-
-Changing category defaults affects the current and future weeks; historical goals remain intact. Do not copy a live SQLite file on its own: use Export JSON or close the app first.
-
-Version 1.7.0 uses SQLite schema 10 and backup format 8. Formats 2 through 7 remain importable. Existing schedule colours are preserved and existing academic events default to Blue. Apply migration 009 manually before synchronizing this version; local edits remain safe and pending until then. Upgrade all syncing devices to 1.7.0 before using Black: version 1.6.0 cannot read Black schedule blocks. Disabled legacy categories become archived without reactivation. An upgrade-week baseline preserves the old historical snapshots: previous archive/restore dates cannot be reconstructed from the old global flags, so older weeks with unknown inclusion retain their legacy behavior. Explicit weekly decisions synchronize and carry forward across skipped or offline weeks. Older backups cannot erase lifecycle decisions already present for their categories.
-
-## Development checks
-
-Run Flutter commands sequentially in one checkout:
-
-```powershell
-./tool/flutter.ps1 analyze
-./tool/flutter.ps1 test
-./tool/test-windows.ps1
-./tool/test-windows.ps1 -SkipBuild -Autostart
-npm install --prefix .tools/sql-test --no-audit --no-fund @electric-sql/pglite@0.5.8
-node tool/test-supabase.mjs
-```
-
-Windows native tests use isolated data and test startup settings. The SQL harness runs migrations and ownership/RLS checks locally without contacting a live Supabase project. Android native test instructions are in the [Android guide](docs/ANDROID.md). GitHub Actions runs the Windows checks and packages a portable ZIP.
-
-Application code is in `lib/`; platform runners are in `windows/` and `android/`, database policies in `supabase/migrations/` and tests in `test/` and `integration_test/`.
-
-Licensed under the [MIT License](LICENSE). The screenshot uses fictional demo data.
+[MIT License](LICENSE)
