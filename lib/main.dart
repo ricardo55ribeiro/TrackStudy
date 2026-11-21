@@ -4,18 +4,21 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'application/study_controller.dart';
 import 'application/sync_controller.dart';
+import 'sync/android_sync_session.dart';
 import 'sync/auth_service.dart';
 import 'sync/supabase_gateway.dart';
 import 'sync/sync_gateway.dart';
+import 'sync/sync_gate.dart';
 import 'sync/sync_store.dart';
 import 'data/database.dart';
+import 'data/installation_data.dart';
 import 'data/local_repository.dart';
 import 'presentation/app.dart';
 import 'platform/windows_background.dart';
+import 'platform/android_background_sync.dart';
 
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,16 +26,10 @@ Future<void> main(List<String> arguments) async {
     final override = arguments
         .where((arg) => arg.startsWith('--data-dir='))
         .firstOrNull;
-    final support = override == null
-        ? await getApplicationSupportDirectory()
-        : null;
-    final dir = Directory(
-      override == null
-          ? p.join(support!.path, 'TrackStudy')
-          : override.substring('--data-dir='.length),
-    );
-    await dir.create(recursive: true);
-    final location = p.join(dir.path, 'trackstudy.sqlite');
+    final location = override == null
+        ? await installationDatabasePath()
+        : p.join(override.substring('--data-dir='.length), 'trackstudy.sqlite');
+    await File(location).parent.create(recursive: true);
     final repository = LocalStudyRepository(
       StudyDatabase(sqlite3.open(location)),
       location: location,
@@ -41,17 +38,16 @@ Future<void> main(List<String> arguments) async {
     // Explicit test/demo directories must never reuse a real installation's
     // secure session or send their fixture records to that account's cloud.
     final cloudEnabled = override == null && config.configured;
+    final store = SyncStore(repository.database);
     final sync = SyncController(
-      store: SyncStore(repository.database),
+      store: store,
       project: config.url,
       configured: cloudEnabled,
       watchLifecycle: true,
-      backup: () async {
-        final file = File(
-          '$location.before-first-sync-${DateTime.now().millisecondsSinceEpoch}.json',
-        );
-        await file.writeAsString(repository.exportJson(), flush: true);
-      },
+      backgroundSync: Platform.isAndroid && override == null
+          ? AndroidBackgroundSync(store, config)
+          : null,
+      backup: () => backupBeforeFirstSync(repository),
     );
     final background = WindowsBackground();
     if (Platform.isWindows) await background.initialize(repository, sync);
@@ -68,7 +64,11 @@ Future<void> main(List<String> arguments) async {
         child: const TrackStudyApp(),
       ),
     );
-    if (cloudEnabled) unawaited(_initializeSync(sync, config));
+    if (cloudEnabled) {
+      unawaited(_initializeSync(sync, config, location));
+    } else if (sync.backgroundSync != null) {
+      unawaited(sync.reconcileBackgroundSync());
+    }
   } catch (error) {
     runApp(
       MaterialApp(
@@ -111,17 +111,33 @@ Future<void> main(List<String> arguments) async {
 Future<void> _initializeSync(
   SyncController sync,
   SupabaseConfiguration config,
+  String location,
 ) async {
   try {
+    final storage = SecureSessionStorage.forProject(config.url);
+    if (Platform.isAndroid) {
+      final session = AndroidSyncSession(
+        store: sync.store!,
+        gate: SyncGate('$location.sync-lock'),
+        configuration: config,
+        storage: storage,
+      );
+      try {
+        await session.restore();
+        sync.connect(session, session.gateway);
+      } catch (_) {
+        await session.dispose();
+        rethrow;
+      }
+      return;
+    }
     await Supabase.initialize(
       url: config.url,
       publishableKey: config.publishableKey,
       debug: false,
       authOptions: FlutterAuthClientOptions(
         detectSessionInUri: false,
-        localStorage: SecureSessionStorage(
-          'trackstudy.session.${Uri.parse(config.url).host}',
-        ),
+        localStorage: storage,
       ),
     );
     final client = Supabase.instance.client;

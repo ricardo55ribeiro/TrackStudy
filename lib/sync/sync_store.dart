@@ -94,14 +94,21 @@ class SyncStore {
     return true;
   }
 
-  void bind(String account, String project) {
-    if ((meta('account').isNotEmpty && meta('account') != account) ||
-        (meta('project').isNotEmpty && meta('project') != project)) {
+  void checkBinding(String account, String project) {
+    final owner = meta('account');
+    final boundProject = meta('project');
+    if ((owner.isNotEmpty && owner != account) ||
+        (boundProject.isNotEmpty && boundProject != project)) {
       throw const FormatException(
         'This local dataset belongs to another account or project. Sign in with the original account.',
       );
     }
+  }
+
+  void bind(String account, String project, {void Function()? guard}) {
     database.transaction(() {
+      guard?.call();
+      checkBinding(account, project);
       setMeta('account', account);
       setMeta('project', project);
     });
@@ -158,8 +165,11 @@ class SyncStore {
     Map<String, List<SyncRow>> remote,
     String account, {
     bool bootstrap = false,
+    void Function()? guard,
+    bool markInitialSync = false,
   }) {
     database.transaction(() {
+      guard?.call();
       setMeta('applying', '1');
       // Upgraded databases are never considered pristine. Only untouched,
       // automatically generated defaults on a new device can be adopted away.
@@ -200,6 +210,8 @@ UPDATE todo_tasks SET
  updated_at=(SELECT deleted_at FROM todo_topics WHERE id=topic_id)
 WHERE deleted_at IS NULL AND topic_id IN (SELECT id FROM todo_topics WHERE deleted_at IS NOT NULL)
 ''');
+      guard?.call();
+      if (markInitialSync) setMeta('initial_sync', 'yes');
     });
   }
 

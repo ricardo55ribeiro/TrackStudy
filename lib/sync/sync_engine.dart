@@ -17,28 +17,39 @@ class SyncEngine {
     }
 
     guard();
-    store.bind(account, project);
+    store.bind(account, project, guard: guard);
     if (store.meta('first_backup').isEmpty) {
       await backup();
-      guard();
-      store.setMeta('first_backup', DateTime.now().toUtc().toIso8601String());
+      store.database.transaction(() {
+        guard();
+        store.setMeta('first_backup', DateTime.now().toUtc().toIso8601String());
+      });
     }
     final remote = await gateway.pull(account);
-    guard();
-    store.apply(remote, account, bootstrap: store.meta('initial_sync').isEmpty);
-    store.setMeta('initial_sync', 'yes');
+    store.apply(
+      remote,
+      account,
+      bootstrap: store.meta('initial_sync').isEmpty,
+      guard: guard,
+      markInitialSync: true,
+    );
     for (final table in syncTables) {
       // Read children after parents so reconciled goal IDs reach every upload.
       for (final row in store.pendingRows(table)) {
         guard();
         final response = await gateway.merge(table, row);
-        guard();
-        store.apply({
-          table: [response],
-        }, account);
+        store.apply(
+          {
+            table: [response],
+          },
+          account,
+          guard: guard,
+        );
       }
     }
-    guard();
-    store.setMeta('last_sync', DateTime.now().toUtc().toIso8601String());
+    store.database.transaction(() {
+      guard();
+      store.setMeta('last_sync', DateTime.now().toUtc().toIso8601String());
+    });
   }
 }

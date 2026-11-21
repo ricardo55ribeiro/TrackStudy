@@ -15,8 +15,11 @@ On a new project, run these migrations in order through Supabase's SQL Editor:
 7. [007_progress_bar_archiving.sql](../supabase/migrations/007_progress_bar_archiving.sql)
 8. [008_schedule_block_colours.sql](../supabase/migrations/008_schedule_block_colours.sql)
 9. [009_monthly_event_colours.sql](../supabase/migrations/009_monthly_event_colours.sql)
+10. [010_yellow_planning_colour.sql](../supabase/migrations/010_yellow_planning_colour.sql)
 
 For an existing project, apply only missing migrations. Do not rerun applied migrations or remove existing tables. Versions 1.7.0 through 1.8.1 require all nine for synchronization. Installing first is safe for local use, but synchronization waits until the schema is available.
+
+Apply migration 010 and update both apps before syncing Yellow schedule blocks or academic events.
 
 For Monthly View colours and Black, apply `supabase/migrations/009_monthly_event_colours.sql` once after 008. It adds academic event colours, extends the schedule colour constraint and preserves existing colours, sync histories, RLS and all causal merge rules. Omitted colours from older clients preserve existing values and default new records to Blue. Version 1.7.0 checks the academic colour column before applying any pull or uploading changes, so an unprepared cloud leaves local edits safe and pending.
 

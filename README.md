@@ -8,7 +8,7 @@ TrackStudy is a study and research planner for Windows and Android. Plan your we
 
 - **See how the week is going.** Set a minimum and a target in Progress Bars, log time or counts and check earlier weeks. Weekly Review shows your totals alongside notes that save as you type.
 - **Keep track of what to do next.** Group assignments and research tasks by topic, drag them into order and check them off. In Research Journal, record what you learned, save questions and add answers as you find them.
-- **Make time for the work.** Use Daily Schedule for recurring classes and study blocks. Use Monthly View for exams, deadlines and other dated events. Both views offer five colours.
+- **Make time for the work.** Use Daily Schedule for recurring classes and study blocks. Use Monthly View for exams, deadlines and other dated events. Both views offer six colours, including Yellow.
 
 ![To-Do List on Windows with Statistics and Research project topics](docs/screenshots/todo-list-dark.png)
 
@@ -32,7 +32,7 @@ GitHub Actions runs the Flutter unit and widget tests, Windows integration tests
 
 ## Get started
 
-The source is at version **1.8.1+13**. The project uses Flutter **3.47.5**.
+The source is at version **1.9.1+15**. The project uses Flutter **3.47.5**.
 
 **Try the Windows build.** Open a successful Windows workflow run and sign in to download the `TrackStudy-windows-x64` artifact if it is still available. Extract the entire portable ZIP and run `trackstudy.exe`. The Releases page is currently empty. [GitHub Actions](https://github.com/ricardo55ribeiro/TrackStudy/actions) · [Windows setup](docs/WINDOWS.md)
 

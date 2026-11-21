@@ -3,13 +3,41 @@ import 'package:sqlite3/sqlite3.dart';
 class StudyDatabase {
   final Database handle;
   StudyDatabase(this.handle) {
+    _configure();
+    migrate();
+  }
+
+  StudyDatabase._existing(this.handle) {
+    if (_schemaVersion != version) {
+      throw StateError(
+        'The existing database needs to be opened in TrackStudy',
+      );
+    }
+    _configure();
+  }
+
+  static StudyDatabase openExisting(String path) {
+    final handle = sqlite3.open(path, mode: OpenMode.readWrite);
+    try {
+      return StudyDatabase._existing(handle);
+    } catch (_) {
+      handle.close();
+      rethrow;
+    }
+  }
+
+  void _configure() {
     handle.execute('PRAGMA foreign_keys = ON');
     handle.execute('PRAGMA busy_timeout = 5000');
     handle.execute('PRAGMA journal_mode = WAL');
     handle.execute('PRAGMA synchronous = FULL');
-    migrate();
   }
-  static const version = 10;
+
+  static const version = 11;
+  static const _planningColourColumn =
+      "colour TEXT NOT NULL DEFAULT 'blue' CHECK(colour IN ('blue','orange','green','red','black','yellow'))";
+  int get _schemaVersion =>
+      handle.select('PRAGMA user_version').first.values.first as int;
   void transaction(void Function() action) {
     handle.execute('BEGIN IMMEDIATE');
     try {
@@ -22,13 +50,14 @@ class StudyDatabase {
   }
 
   void migrate() {
-    final old = handle.select('PRAGMA user_version').first.values.first as int;
-    if (old > version) {
-      throw StateError(
-        'This database belongs to a newer TrackStudy version. Please upgrade the app.',
-      );
-    }
     transaction(() {
+      final old = _schemaVersion;
+      if (old == version) return;
+      if (old > version) {
+        throw StateError(
+          'This database belongs to a newer TrackStudy version. Please upgrade the app.',
+        );
+      }
       if (old < 1) {
         handle.execute('''
 CREATE TABLE categories (
@@ -280,35 +309,48 @@ END;
           "ALTER TABLE schedule_blocks ADD COLUMN colour TEXT NOT NULL DEFAULT 'blue' CHECK(colour IN ('blue','orange','green','red'))",
         );
       }
-      if (old < 10) {
-        final schema = handle
-            .select(
-              "SELECT sql FROM sqlite_master WHERE tbl_name='schedule_blocks' AND type IN ('index','trigger') AND sql IS NOT NULL ORDER BY type,name",
-            )
-            .map((row) => row['sql'] as String)
-            .toList();
-        // Copy before installing triggers so replication stamps remain untouched
-        handle.execute("""
-CREATE TABLE schedule_blocks_next (
+      if (old < 11) {
+        if (old < 10) {
+          handle.execute(
+            'ALTER TABLE academic_events ADD COLUMN $_planningColourColumn',
+          );
+        } else {
+          _rebuildPlanningTable('academic_events', '''
+ id TEXT PRIMARY KEY, title TEXT NOT NULL CHECK(length(trim(title)) BETWEEN 1 AND 120),
+ event_date TEXT NOT NULL, event_type TEXT NOT NULL CHECK(event_type IN ('exam','test','project','presentation','deadline','other')),
+ note TEXT NOT NULL CHECK(length(note)<=2000), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
+ $_planningColourColumn
+''');
+        }
+        _rebuildPlanningTable('schedule_blocks', '''
  id TEXT PRIMARY KEY, title TEXT NOT NULL CHECK(length(trim(title)) BETWEEN 1 AND 120),
  weekday INTEGER NOT NULL CHECK(weekday BETWEEN 1 AND 7),
  start_minute INTEGER NOT NULL CHECK(typeof(start_minute)='integer' AND start_minute>=0 AND start_minute<1440),
  end_minute INTEGER NOT NULL CHECK(typeof(end_minute)='integer' AND end_minute>start_minute AND end_minute<=1440),
  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
  description TEXT CHECK(description IS NULL OR length(description)<=2000),
- colour TEXT NOT NULL DEFAULT 'blue' CHECK(colour IN ('blue','orange','green','red','black'))
-);
-INSERT INTO schedule_blocks_next SELECT id,title,weekday,start_minute,end_minute,created_at,updated_at,deleted_at,description,colour FROM schedule_blocks;
-DROP TABLE schedule_blocks;
-ALTER TABLE schedule_blocks_next RENAME TO schedule_blocks;
-ALTER TABLE academic_events ADD COLUMN colour TEXT NOT NULL DEFAULT 'blue' CHECK(colour IN ('blue','orange','green','red','black'));
-""");
-        for (final sql in schema) {
-          handle.execute(sql);
-        }
+ $_planningColourColumn
+''');
       }
       handle.execute('PRAGMA user_version = $version');
     });
+  }
+
+  void _rebuildPlanningTable(String table, String columns) {
+    final schema = handle.select(
+      "SELECT sql FROM sqlite_master WHERE tbl_name=? AND type IN ('index','trigger') AND sql IS NOT NULL ORDER BY type,name",
+      [table],
+    );
+    // Copy rows before restoring triggers to preserve existing sync stamps
+    handle.execute('''
+CREATE TABLE ${table}_next ($columns);
+INSERT INTO ${table}_next SELECT * FROM $table;
+DROP TABLE $table;
+ALTER TABLE ${table}_next RENAME TO $table;
+''');
+    for (final row in schema) {
+      handle.execute(row['sql'] as String);
+    }
   }
 
   void close() => handle.close();

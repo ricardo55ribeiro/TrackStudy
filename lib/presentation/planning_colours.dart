@@ -8,10 +8,12 @@ extension ScheduleColourPalette on ScheduleColour {
     (ScheduleColour.orange, Brightness.light) => const Color(0xFFF4E2CF),
     (ScheduleColour.green, Brightness.light) => const Color(0xFFDDEBDD),
     (ScheduleColour.red, Brightness.light) => const Color(0xFFF2DDDF),
+    (ScheduleColour.yellow, Brightness.light) => const Color(0xFFF4E9A9),
     (ScheduleColour.blue, Brightness.dark) => const Color(0xFF293E56),
     (ScheduleColour.orange, Brightness.dark) => const Color(0xFF513D2B),
     (ScheduleColour.green, Brightness.dark) => const Color(0xFF2D4536),
     (ScheduleColour.red, Brightness.dark) => const Color(0xFF513237),
+    (ScheduleColour.yellow, Brightness.dark) => const Color(0xFF5A4F20),
   };
 
   Color foreground(Brightness brightness) =>
@@ -43,57 +45,53 @@ class PlanningColourSelector extends StatelessWidget {
           const SizedBox(height: 8),
           const Text('Colour'),
           const SizedBox(height: 4),
-          SizedBox(
-            width: 240,
-            child: Row(
-              children: [
-                for (final option in ScheduleColour.values)
-                  Expanded(
-                    child: Semantics(
-                      label: option.label,
-                      button: true,
-                      selected: colour == option,
-                      child: Tooltip(
-                        message: option.label,
-                        excludeFromSemantics: true,
-                        child: InkResponse(
-                          key: ValueKey('$keyPrefix-colour-${option.name}'),
-                          onTap: () => onChanged(option),
-                          radius: 24,
-                          child: SizedBox(
-                            height: 48,
-                            child: Center(
-                              child: Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: option.background(brightness),
-                                  border: Border.all(
-                                    color: option
-                                        .foreground(brightness)
-                                        .withValues(
-                                          alpha: colour == option ? .75 : .2,
-                                        ),
-                                    width: colour == option ? 2 : 1,
-                                  ),
-                                ),
-                                child: colour == option
-                                    ? Icon(
-                                        Icons.check,
-                                        size: 18,
-                                        color: option.foreground(brightness),
-                                      )
-                                    : null,
+          Wrap(
+            children: [
+              for (final option in ScheduleColour.values)
+                SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Semantics(
+                    label: option.label,
+                    button: true,
+                    selected: colour == option,
+                    child: Tooltip(
+                      message: option.label,
+                      excludeFromSemantics: true,
+                      child: InkResponse(
+                        key: ValueKey('$keyPrefix-colour-${option.name}'),
+                        onTap: () => onChanged(option),
+                        radius: 24,
+                        child: Center(
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: option.background(brightness),
+                              border: Border.all(
+                                color: option
+                                    .foreground(brightness)
+                                    .withValues(
+                                      alpha: colour == option ? .75 : .2,
+                                    ),
+                                width: colour == option ? 2 : 1,
                               ),
                             ),
+                            child: colour == option
+                                ? Icon(
+                                    Icons.check,
+                                    size: 18,
+                                    color: option.foreground(brightness),
+                                  )
+                                : null,
                           ),
                         ),
                       ),
                     ),
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
         ],
       ),

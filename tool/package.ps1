@@ -5,7 +5,8 @@ try {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     $visualStudio = $null
     if (Test-Path -LiteralPath $vswhere) {
-        $visualStudio = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        $components = @('Microsoft.VisualStudio.Component.VC.Tools.x86.x64', 'Microsoft.VisualStudio.Component.VC.ATL')
+        $visualStudio = & $vswhere -latest -products '*' -requires @components -property installationPath
     }
     if (!$visualStudio -and (Test-Path -LiteralPath "$projectRoot\.tools\msvc\setup_x64.bat")) {
         & "$PSScriptRoot\build-portable.ps1"

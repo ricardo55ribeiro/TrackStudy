@@ -13,6 +13,14 @@ abstract interface class SyncAuth {
   Future<void> signOut();
 }
 
+abstract interface class CoordinatedSyncAuth implements SyncAuth {
+  Future<void> withSession(
+    String accountId,
+    bool Function() active,
+    Future<void> Function() action,
+  );
+}
+
 class SupabaseSyncAuth implements SyncAuth {
   final SupabaseClient client;
   SupabaseSyncAuth(this.client);
@@ -44,6 +52,8 @@ class SecureSessionStorage extends LocalStorage {
     this.key, {
     this.storage = const FlutterSecureStorage(),
   });
+  factory SecureSessionStorage.forProject(String url) =>
+      SecureSessionStorage('trackstudy.session.${Uri.parse(url).host}');
   @override
   Future<void> initialize() async {}
   @override

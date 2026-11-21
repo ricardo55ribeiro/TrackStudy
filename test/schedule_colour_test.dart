@@ -128,7 +128,7 @@ void main() {
           row.remove('colour');
         }
         target.restoreJson(jsonEncode(legacy));
-        expect(target.schedule(1), hasLength(5));
+        expect(target.schedule(1), hasLength(ScheduleColour.values.length));
         expect(
           target.schedule(1).every((b) => b.colour == ScheduleColour.blue),
           isTrue,

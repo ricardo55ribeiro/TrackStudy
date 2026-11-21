@@ -101,10 +101,10 @@ Future<void> exerciseMonthlyColours(
     if (phone) {
       expect(
         tester.widget<Text>(find.byKey(ValueKey('event-count-$date'))).data,
-        '5',
+        '${events.length}',
       );
     } else {
-      expect(find.text('+3 more'), findsOneWidget);
+      expect(find.text('+${events.length - 2} more'), findsOneWidget);
       for (final event in events.take(2)) {
         final badge = find.byKey(ValueKey('event-badge-${event.id}'));
         expect(
@@ -173,7 +173,7 @@ Future<void> exerciseMonthlyColours(
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
-    expect(repo.academicEvents(today), hasLength(4));
+    expect(repo.academicEvents(today), hasLength(events.length - 1));
     expect(tester.takeException(), isNull);
   } finally {
     await tester.pumpWidget(const SizedBox());

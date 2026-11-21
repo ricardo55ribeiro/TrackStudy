@@ -21,9 +21,87 @@ AcademicEvent colouredEvent(ScheduleColour colour, {String? id}) =>
       colour: colour,
     );
 
+ResultSet _tableObjects(Database db, String table) => db.select(
+  "SELECT name,sql FROM sqlite_master WHERE tbl_name=? AND type IN ('trigger','index') AND sql IS NOT NULL ORDER BY name",
+  [table],
+);
+
+void _restrictPalette(Database db, String table, String previousColours) {
+  final objects = _tableObjects(db, table);
+  final create =
+      db.select('SELECT sql FROM sqlite_master WHERE name=?', [
+            table,
+          ]).single['sql']
+          as String;
+  db.execute(
+    create
+        .replaceFirst(
+          RegExp('^CREATE TABLE "?$table"?'),
+          'CREATE TABLE ${table}_old',
+        )
+        .replaceFirst(
+          "'blue','orange','green','red','black','yellow'",
+          previousColours,
+        ),
+  );
+  db.execute('''
+INSERT INTO ${table}_old SELECT * FROM $table;
+DROP TABLE $table;
+ALTER TABLE ${table}_old RENAME TO $table;
+''');
+  for (final object in objects) {
+    db.execute(object['sql'] as String);
+  }
+}
+
 void main() {
   LocalStudyRepository memory() =>
       LocalStudyRepository(StudyDatabase(sqlite3.openInMemory()));
+
+  test('schema 10 upgrade keeps both planning tables and enables Yellow', () {
+    final repo = memory();
+    addTearDown(repo.close);
+    final block = colouredBlock(ScheduleColour.black);
+    final event = colouredEvent(ScheduleColour.orange);
+    repo.saveSchedule(block);
+    repo.saveAcademicEvent(event);
+    final db = repo.database.handle;
+    const tables = ['schedule_blocks', 'academic_events'];
+    for (final table in tables) {
+      _restrictPalette(db, table, "'blue','orange','green','red','black'");
+      expect(
+        () => db.execute("UPDATE $table SET colour='yellow'"),
+        throwsA(isA<SqliteException>()),
+      );
+    }
+    db.execute('PRAGMA user_version=10');
+    final before = {
+      for (final table in [...tables, 'sync_meta', 'sync_records'])
+        table: db.select('SELECT * FROM $table'),
+    };
+    final objects = {
+      for (final table in tables) table: _tableObjects(db, table),
+    };
+
+    StudyDatabase(db);
+
+    expect(
+      db.select('PRAGMA user_version').single.values.single,
+      StudyDatabase.version,
+    );
+    for (final entry in before.entries) {
+      expect(db.select('SELECT * FROM ${entry.key}'), entry.value);
+    }
+    for (final table in tables) {
+      expect(_tableObjects(db, table), objects[table]);
+    }
+    repo.saveSchedule(colouredBlock(ScheduleColour.yellow, id: block.id));
+    repo.saveAcademicEvent(colouredEvent(ScheduleColour.yellow, id: event.id));
+    final store = SyncStore(repo.database);
+    for (final table in tables) {
+      expect(store.pendingRows(table).single['colour'], 'yellow');
+    }
+  });
 
   test(
     'schema 9 migration preserves four block colours, event content, triggers and causal metadata',
@@ -39,27 +117,8 @@ void main() {
         repo.academicEvents(DateTime(2026, 11)).first.id,
       );
       final db = repo.database.handle;
-      final objects = db.select(
-        "SELECT name,sql FROM sqlite_master WHERE tbl_name='schedule_blocks' AND type IN ('trigger','index') AND sql IS NOT NULL ORDER BY name",
-      );
-      final create =
-          db
-                  .select(
-                    "SELECT sql FROM sqlite_master WHERE name='schedule_blocks'",
-                  )
-                  .single['sql']
-              as String;
-      db.execute(
-        create
-            .replaceFirst('"schedule_blocks"', 'schedule_blocks_old')
-            .replaceFirst("'red','black'", "'red'"),
-      );
-      db.execute(
-        'INSERT INTO schedule_blocks_old SELECT * FROM schedule_blocks; DROP TABLE schedule_blocks; ALTER TABLE schedule_blocks_old RENAME TO schedule_blocks',
-      );
-      for (final object in objects) {
-        db.execute(object['sql'] as String);
-      }
+      final objects = _tableObjects(db, 'schedule_blocks');
+      _restrictPalette(db, 'schedule_blocks', "'blue','orange','green','red'");
       db.execute(
         'ALTER TABLE academic_events DROP COLUMN colour; PRAGMA user_version=9',
       );
@@ -100,7 +159,10 @@ void main() {
           table: rows(table),
       };
       StudyDatabase(db);
-      expect(db.select('PRAGMA user_version').single.values.single, 10);
+      expect(
+        db.select('PRAGMA user_version').single.values.single,
+        StudyDatabase.version,
+      );
       for (final table in before.keys) {
         expect(
           rows(table),
@@ -109,12 +171,7 @@ void main() {
               : before[table],
         );
       }
-      expect(
-        db.select(
-          "SELECT name,sql FROM sqlite_master WHERE tbl_name='schedule_blocks' AND type IN ('trigger','index') AND sql IS NOT NULL ORDER BY name",
-        ),
-        objects,
-      );
+      expect(_tableObjects(db, 'schedule_blocks'), objects);
       final store = SyncStore(repo.database);
       final clock = int.parse(store.meta('clock'));
       final block = repo.schedule(1).first;
@@ -150,7 +207,7 @@ void main() {
   );
 
   test(
-    'all five event colours persist through file reopen and validate strictly',
+    'all event colours persist through file reopen and validate strictly',
     () async {
       final directory = await Directory.systemTemp.createTemp(
         'monthly-colours-',
@@ -210,7 +267,7 @@ void main() {
           row.remove('colour');
         }
         final blocks = legacy['tables']['schedule_blocks'] as List;
-        blocks.removeWhere((r) => r['colour'] == 'black');
+        blocks.removeWhere((r) => ['black', 'yellow'].contains(r['colour']));
         if (version < 7) {
           for (final row in blocks) {
             row.remove('colour');
@@ -262,7 +319,7 @@ void main() {
   );
 
   test(
-    'event colours and Black blocks converge with offline and concurrent edits',
+    'event and block colours converge with offline and concurrent edits',
     () async {
       final pc = memory(), phone = memory();
       addTearDown(pc.close);
@@ -273,17 +330,17 @@ void main() {
         cloud,
         backup: () async {},
       ).synchronize(account, project, () => true);
-      final event = colouredEvent(ScheduleColour.black),
-          block = colouredBlock(ScheduleColour.black);
+      final event = colouredEvent(ScheduleColour.yellow),
+          block = colouredBlock(ScheduleColour.yellow);
       pc.saveAcademicEvent(event);
       pc.saveSchedule(block);
       await sync(pc);
       await sync(phone);
       expect(
         phone.academicEvents(DateTime(2026, 11)).single.colour,
-        ScheduleColour.black,
+        ScheduleColour.yellow,
       );
-      expect(phone.schedule(1).single.colour, ScheduleColour.black);
+      expect(phone.schedule(1).single.colour, ScheduleColour.yellow);
       cloud.offline = true;
       phone.saveAcademicEvent(
         colouredEvent(ScheduleColour.orange, id: event.id),

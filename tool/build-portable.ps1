@@ -63,7 +63,8 @@ try {
     }
     Copy-Item -LiteralPath "$PSScriptRoot\install-shortcut.ps1", "$PSScriptRoot\Create Desktop Shortcut.bat" -Destination $bundle
     if ($Configuration -eq 'Release') {
-        Compress-Archive -Path "$bundle\*" -DestinationPath (Join-Path $projectRoot 'dist\TrackStudy-windows-x64.zip') -Force
+        $files = Get-ChildItem -LiteralPath $bundle | Where-Object { $_.PSIsContainer -or $_.Extension -ne '.zip' }
+        Compress-Archive -LiteralPath $files.FullName -DestinationPath (Join-Path $projectRoot 'dist\TrackStudy-windows-x64.zip') -Force
     }
     Write-Output "Windows bundle: $bundle"
 } finally { Pop-Location }

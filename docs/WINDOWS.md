@@ -10,7 +10,7 @@ Before replacing the extracted files, export a JSON backup and quit the running 
 
 ## Build from source
 
-Install Git, Flutter 3.47.5 (Dart 3.13.4) and Visual Studio 2022 or Build Tools with **Desktop development with C++**, the Windows SDK and CMake. Enable Windows Developer Mode for plugin symlinks.
+Install Git, Flutter 3.47.5 (Dart 3.13.4) and Visual Studio 2022 or Build Tools with **Desktop development with C++**, the Windows SDK, CMake and C++ ATL for x86 and x64. Enable Windows Developer Mode for plugin symlinks.
 
 From the repository root in PowerShell, fetch dependencies and run the app.
 

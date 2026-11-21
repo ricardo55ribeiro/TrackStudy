@@ -19,6 +19,7 @@ dist/
 windows/flutter/ephemeral/
 android/local.properties
 android/.gradle/
+android/.kotlin/
 *.iml
 .idea/
 flutter_*.log

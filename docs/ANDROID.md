@@ -21,7 +21,15 @@ On first use, the helper creates a persistent personal release key in `android/s
 
 Copy the signed APK to your phone and open it in Files. If prompted, allow that app to install APKs, then choose Install or Update. For updates, **do not uninstall TrackStudy or clear its storage**: that would remove the local database and unsynchronized work. Debug builds use a different signing identity and are for test devices.
 
-On a fresh installation, sign in to the same Supabase project/account before entering data if you want to adopt an existing cloud dataset. Settings shows sync status and pending changes. Android may suspend background work, so reopen/resume TrackStudy to allow uploads and downloads to finish.
+On a fresh installation, sign in to the same Supabase project and account before entering data if you want to adopt an existing cloud dataset. Settings shows sync status and pending changes.
+
+## Background sync
+
+While signed in, you can turn on **Settings → Sync → Background sync**. It is off by default and applies only to this Android device. TrackStudy asks Android to run a short sync about once an hour when a network connection is available, even with the app closed.
+
+Android controls the timing. Doze, Battery Saver and device policies can delay or skip a run. If you force-stop TrackStudy, open it again to allow background work to resume. Opening or resuming the app still checks for cloud changes. Turn the switch off at any time. Signing out also turns it off and cancels scheduled work.
+
+Background sync uses the existing SQLite database and Supabase setup. It requires no database or cloud migration.
 
 ## Data and backup
 

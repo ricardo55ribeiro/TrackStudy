@@ -51,7 +51,7 @@ class SyncSettings extends ConsumerWidget {
                 child: const Text('Sync now'),
               ),
               TextButton(
-                onPressed: () => sync.signOut(),
+                onPressed: sync.signingOut ? null : () => sync.signOut(),
                 child: const Text('Sign out'),
               ),
             ],
@@ -111,6 +111,21 @@ class SyncSettings extends ConsumerWidget {
               ),
           ],
         ),
+        if (sync.backgroundSync != null &&
+            sync.configured &&
+            sync.account != null)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Background sync'),
+            subtitle: const Text(
+              'Sync about once an hour when TrackStudy is closed. Android may delay background tasks.',
+            ),
+            value: sync.backgroundSyncEnabled,
+            onChanged: sync.canEnableBackgroundSync
+                ? sync.setBackgroundSync
+                : null,
+          ),
+        if (sync.backgroundSyncError != null) Text(sync.backgroundSyncError!),
         const SizedBox(height: 8),
         Text(
           !sync.configured

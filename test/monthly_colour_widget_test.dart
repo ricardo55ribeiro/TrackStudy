@@ -70,7 +70,7 @@ void main() {
     },
   );
   test(
-    'five distinct shades retain the original palette and Black stays dark in both themes',
+    'six distinct shades retain the original palette and Black stays dark in both themes',
     () {
       expect(ScheduleColour.values.map((c) => c.name), [
         'blue',
@@ -78,11 +78,12 @@ void main() {
         'green',
         'red',
         'black',
+        'yellow',
       ]);
       for (final brightness in Brightness.values) {
         expect(
           ScheduleColour.values.map((c) => c.background(brightness)).toSet(),
-          hasLength(5),
+          hasLength(ScheduleColour.values.length),
         );
         expect(
           ScheduleColour.black.background(brightness).computeLuminance(),
@@ -110,7 +111,7 @@ void main() {
   for (final phone in [false, true]) {
     for (final brightness in Brightness.values) {
       testWidgets(
-        'monthly five colours, badges, details, indicators and editing phone=$phone ${brightness.name}',
+        'monthly colours, badges, details, indicators and editing phone=$phone ${brightness.name}',
         (tester) async {
           tester.view.physicalSize = Size(phone ? 320 : 1100, 900);
           tester.view.devicePixelRatio = 1;
@@ -126,7 +127,7 @@ void main() {
     }
   }
   testWidgets(
-    'small event Add/Edit dialogs fit all five colours with keyboard and enlarged text',
+    'small event Add/Edit dialogs fit all colours with keyboard and enlarged text',
     (tester) async {
       tester.view.physicalSize = const Size(320, 640);
       tester.view.devicePixelRatio = 1;
@@ -163,14 +164,14 @@ void main() {
           ),
         ),
       );
-      for (final colour in [ScheduleColour.black, ScheduleColour.orange]) {
+      for (final colour in [ScheduleColour.yellow, ScheduleColour.orange]) {
         await tester.tap(find.text('Open'));
         await tester.pumpAndSettle();
         expectEventSelection(
           tester,
-          colour == ScheduleColour.black
+          colour == ScheduleColour.yellow
               ? ScheduleColour.blue
-              : ScheduleColour.black,
+              : ScheduleColour.yellow,
         );
         await tester.enterText(
           find.widgetWithText(TextField, 'Title'),

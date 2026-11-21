@@ -53,7 +53,8 @@ enum ScheduleColour {
   orange,
   green,
   red,
-  black;
+  black,
+  yellow;
 
   String get label => '${name[0].toUpperCase()}${name.substring(1)}';
 

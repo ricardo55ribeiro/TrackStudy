@@ -76,16 +76,16 @@ void main() {
         find.widgetWithText(TextField, 'Title'),
         'Small screen',
       );
-      await tester.ensureVisible(swatch(ScheduleColour.red));
-      await tester.tap(swatch(ScheduleColour.red));
+      await tester.ensureVisible(swatch(ScheduleColour.yellow));
+      await tester.tap(swatch(ScheduleColour.yellow));
       await tester.pumpAndSettle();
-      expectSelected(tester, ScheduleColour.red);
+      expectSelected(tester, ScheduleColour.yellow);
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
-      expect(repo.schedule(1).single.colour, ScheduleColour.red);
+      expect(repo.schedule(1).single.colour, ScheduleColour.yellow);
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
-      expectSelected(tester, ScheduleColour.red);
+      expectSelected(tester, ScheduleColour.yellow);
       await tester.ensureVisible(swatch(ScheduleColour.green));
       await tester.tap(swatch(ScheduleColour.green));
       await tester.pumpAndSettle();

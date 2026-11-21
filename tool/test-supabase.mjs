@@ -23,7 +23,7 @@ try {
     grant execute on function auth.uid() to authenticated, anon;
   `);
   await db.query('insert into auth.users values ($1),($2)',[a,b]);
-  for (const file of ['001_initial.sql','002_sync.sql','003_causal_sync.sql','004_schedule_and_events.sql','005_journal_answers_schedule_description.sql','006_todo_list.sql','007_progress_bar_archiving.sql','008_schedule_block_colours.sql','009_monthly_event_colours.sql']) {
+  for (const file of ['001_initial.sql','002_sync.sql','003_causal_sync.sql','004_schedule_and_events.sql','005_journal_answers_schedule_description.sql','006_todo_list.sql','007_progress_bar_archiving.sql','008_schedule_block_colours.sql','009_monthly_event_colours.sql','010_yellow_planning_colour.sql']) {
     const legacyJournal=randomUUID(), legacyBlock=randomUUID();
     if(file.startsWith('005')) {
       await db.query("insert into public.journal(id,user_id,learned,question,next,experiment) values ($1,$2,'Existing','Why?','Next','{}')",[legacyJournal,a]);
@@ -209,14 +209,14 @@ try {
   for (const table of ['schedule_blocks','academic_events']) {
     let saved=await merge(table,{...planning[table],id:randomUUID()});
     check(saved.colour==='blue',`${table}: omitted new colour defaults to Blue`);
-    for (const colour of ['blue','orange','green','red','black']) {
+    for (const colour of ['blue','orange','green','red','black','yellow']) {
       saved=await merge(table,{...saved,colour,sync_version:saved.sync_version+1});
       check(saved.colour===colour,`${table}: persist ${colour}`);
     }
     const older={...saved,title:'Older client title',sync_version:saved.sync_version+1,sync_writer:'older-client'};
     delete older.colour;
     const oldSaved=await merge(table,older);
-    check(oldSaved.colour==='black' && oldSaved.title==='Older client title',`${table}: omitted colour preserves Black on a winning edit`);
+    check(oldSaved.colour==='yellow' && oldSaved.title==='Older client title',`${table}: omitted colour preserves Yellow on a winning edit`);
     check((await merge(table,older)).revision===oldSaved.revision,`${table}: old-client retry is idempotent`);
     for (const colour of [null,'purple',42,'Black']) {
       await rejects(()=>merge(table,{...oldSaved,colour,sync_version:40}),`${table}: reject invalid explicit colour ${colour}`);
@@ -224,11 +224,11 @@ try {
     }
     const prior=(await db.query('select count(*)::int n from public.sync_conflicts')).rows[0].n;
     await merge(table,{...oldSaved,colour:'orange',sync_version:50,sync_writer:'palette-a'});
-    const winner=await merge(table,{...oldSaved,colour:'black',sync_version:50,sync_writer:'palette-z'});
-    check(winner.colour==='black',`${table}: concurrent colour winner follows existing ordering`);
+    const winner=await merge(table,{...oldSaved,colour:'yellow',sync_version:50,sync_writer:'palette-z'});
+    check(winner.colour==='yellow',`${table}: concurrent colour winner follows existing ordering`);
     check((await db.query('select count(*)::int n from public.sync_conflicts')).rows[0].n===prior+1,`${table}: retains losing colour in conflict history`);
     await merge(table,older);
-    check((await db.query(`select colour from public.${table} where id=$1`,[oldSaved.id])).rows[0].colour==='black',`${table}: stale older client cannot reset colour`);
+    check((await db.query(`select colour from public.${table} where id=$1`,[oldSaved.id])).rows[0].colour==='yellow',`${table}: stale older client cannot reset colour`);
     await asUser(b);
     check((await db.query(`select id from public.${table} where id=$1`,[oldSaved.id])).rows.length===0,`${table}: palette migration retains RLS`);
     await rejects(()=>merge(table,{...winner,sync_version:60}),`${table}: another owner cannot edit colours`);
@@ -430,5 +430,5 @@ try {
     await rejects(()=>db.query(`update public.${table} set user_id=$1`,[b]),`${table}: anonymous update denied`);
     await rejects(()=>db.exec(`delete from public.${table}`),`${table}: anonymous delete denied`);
   }
-  console.log(`PASS: all nine migrations executed; ${checks} PostgreSQL merge, idempotency, ownership, RLS, tombstone and conflict checks passed.`);
+  console.log(`PASS: all migrations executed; ${checks} PostgreSQL merge, idempotency, ownership, RLS, tombstone and conflict checks passed.`);
 } finally { await db.close(); }
