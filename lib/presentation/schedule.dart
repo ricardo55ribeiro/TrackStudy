@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' show ViewFocusEvent, ViewFocusState;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -20,9 +22,25 @@ class ScheduleScreen extends ConsumerStatefulWidget {
   ConsumerState<ScheduleScreen> createState() => _ScheduleScreenState();
 }
 
+class _ScheduleLongPressRecognizer extends LongPressGestureRecognizer {
+  double latestY = 0;
+
+  @override
+  void handlePrimaryPointer(PointerEvent event) {
+    // Keep motions within touch slop for the first preview frame
+    latestY = event.localPosition.dy;
+    super.handlePrimaryPointer(event);
+  }
+}
+
 class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
     with WidgetsBindingObserver {
   final scroll = ScrollController();
+  final _horizontalScroll = ScrollController();
+  final _timelineKey = GlobalKey();
+  final _dragRange = ValueNotifier<ScheduleRange?>(null);
+  ({int weekday, int firstMinute, double y, Rect bounds})? _dragAnchor;
+  bool _viewFocused = true;
   Timer? timer;
   late DateTime now;
   late int day;
@@ -35,6 +53,8 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
     now = readClock();
     day = now.weekday;
     WidgetsBinding.instance.addObserver(this);
+    scroll.addListener(_cancelDrag);
+    _horizontalScroll.addListener(_cancelDrag);
     updateTimer();
     if (widget.active) reveal();
   }
@@ -58,6 +78,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
   void didUpdateWidget(ScheduleScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.active != widget.active) {
+      _cancelDrag();
       if (widget.active) {
         now = readClock();
         day = now.weekday;
@@ -70,6 +91,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     foreground = state == AppLifecycleState.resumed;
+    if (!foreground) _cancelDrag();
     if (foreground) {
       setState(() {
         final next = readClock();
@@ -80,6 +102,122 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
       });
     }
     updateTimer();
+  }
+
+  @override
+  void didChangeViewFocus(ViewFocusEvent event) {
+    if (event.viewId != View.of(context).viewId) return;
+    _viewFocused = event.state == ViewFocusState.focused;
+    if (!_viewFocused) _cancelDrag();
+  }
+
+  @override
+  void didChangeMetrics() => _cancelDrag();
+
+  Rect? get _timelineBounds {
+    final box = _timelineKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
+  void _cancelDrag() {
+    _dragAnchor = null;
+    _dragRange.value = null;
+  }
+
+  ScheduleRange? _rangeAt(double y) {
+    final anchor = _dragAnchor;
+    if (anchor == null) return null;
+    if (anchor.weekday != day || anchor.bounds != _timelineBounds) {
+      _cancelDrag();
+      return null;
+    }
+    return snapScheduleRange(anchor.y, y, firstMinute: anchor.firstMinute);
+  }
+
+  void _beginDrag(LongPressDownDetails details, int firstMinute) {
+    final bounds = _timelineBounds;
+    if (!widget.active || !foreground || !_viewFocused || bounds == null) {
+      return;
+    }
+    _dragAnchor = (
+      weekday: day,
+      firstMinute: firstMinute,
+      y: details.localPosition.dy,
+      bounds: bounds,
+    );
+  }
+
+  void _finishDrag(LongPressEndDetails details) {
+    final range = _dragRange.value == null
+        ? null
+        : _rangeAt(details.localPosition.dy);
+    _cancelDrag();
+    if (range == null) return;
+    final weekday = day;
+    showDialog<void>(
+      context: context,
+      builder: (_) => ScheduleEditor(
+        weekday: weekday,
+        initialStartMinute: range.start,
+        initialEndMinute: range.end,
+      ),
+    );
+  }
+
+  Widget _timelineSelection(int firstMinute, ColorScheme scheme) {
+    final gestureSettings = MediaQuery.maybeGestureSettingsOf(context);
+    return RawGestureDetector(
+      key: _timelineKey,
+      behavior: HitTestBehavior.opaque,
+      excludeFromSemantics: true,
+      gestures: {
+        _ScheduleLongPressRecognizer:
+            GestureRecognizerFactoryWithHandlers<_ScheduleLongPressRecognizer>(
+              _ScheduleLongPressRecognizer.new,
+              (recognizer) {
+                recognizer
+                  ..gestureSettings = gestureSettings
+                  ..onLongPressDown = (details) {
+                    _beginDrag(details, firstMinute);
+                  }
+                  ..onLongPressStart = (_) {
+                    _dragRange.value = _rangeAt(recognizer.latestY);
+                  }
+                  ..onLongPressMoveUpdate = (details) {
+                    if (_dragRange.value != null) {
+                      _dragRange.value = _rangeAt(details.localPosition.dy);
+                    }
+                  }
+                  ..onLongPressCancel = _cancelDrag
+                  ..onLongPressEnd = _finishDrag;
+              },
+            ),
+      },
+      child: ValueListenableBuilder(
+        valueListenable: _dragRange,
+        builder: (context, range, _) => Stack(
+          children: [
+            if (range != null)
+              Positioned(
+                top: (range.start - firstMinute) * scheduleMinuteHeight,
+                height: (range.end - range.start) * scheduleMinuteHeight,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    key: const ValueKey('schedule-selection-preview'),
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withValues(alpha: .22),
+                      border: Border.all(color: scheme.primary),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   int startMinute(List<ScheduleBlock> blocks) => math.min(
@@ -101,9 +239,11 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
   });
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     timer?.cancel();
     scroll.dispose();
-    WidgetsBinding.instance.removeObserver(this);
+    _horizontalScroll.dispose();
+    _dragRange.dispose();
     super.dispose();
   }
 
@@ -216,6 +356,20 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
     final study = ref.watch(studyProvider),
         blocks = study.repository.schedule(day);
     final start = startMinute(blocks), scheme = Theme.of(context).colorScheme;
+    if (_dragAnchor case final anchor?) {
+      if (anchor.weekday != day || anchor.firstMinute != start) {
+        _cancelDrag();
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted &&
+              _dragAnchor == anchor &&
+              anchor.bounds != _timelineBounds) {
+            _cancelDrag();
+          }
+        });
+      }
+    }
+    final timelineHeight = (1440 - start) * scheduleMinuteHeight;
     final brightness = Theme.of(context).brightness;
     final onExport = exporting ? null : exportSchedule;
     final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
@@ -283,6 +437,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
                   label: Text(weekdays[d - 1].substring(0, 3)),
                   selected: day == d,
                   onSelected: (_) {
+                    if (day != d) _cancelDrag();
                     setState(() => day = d);
                     reveal();
                   },
@@ -311,10 +466,11 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
                   );
                   final width = timelineWidth - gutter;
                   return SingleChildScrollView(
+                    controller: _horizontalScroll,
                     scrollDirection: Axis.horizontal,
                     child: SizedBox(
                       width: timelineWidth,
-                      height: (1440 - start) * scheduleMinuteHeight + 30,
+                      height: timelineHeight + 30,
                       child: Stack(
                         clipBehavior: Clip.none,
                         children: [
@@ -345,6 +501,13 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
                                 ],
                               ),
                             ),
+                          Positioned(
+                            top: 0,
+                            left: gutter,
+                            right: 0,
+                            height: timelineHeight,
+                            child: _timelineSelection(start, scheme),
+                          ),
                           for (final placement in placements)
                             Positioned.fromRect(
                               key: ValueKey('block-${placement.block.id}'),
@@ -432,7 +595,14 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen>
 class ScheduleEditor extends ConsumerStatefulWidget {
   final int weekday;
   final ScheduleBlock? block;
-  const ScheduleEditor({super.key, required this.weekday, this.block});
+  final int? initialStartMinute, initialEndMinute;
+  const ScheduleEditor({
+    super.key,
+    required this.weekday,
+    this.block,
+    this.initialStartMinute,
+    this.initialEndMinute,
+  });
   @override
   ConsumerState<ScheduleEditor> createState() => _ScheduleEditorState();
 }
@@ -443,10 +613,14 @@ class _ScheduleEditorState extends ConsumerState<ScheduleEditor> {
         text: widget.block?.description ?? '',
       ),
       start = TextEditingController(
-        text: WallTime.label(widget.block?.startMinute ?? 540),
+        text: WallTime.label(
+          widget.block?.startMinute ?? widget.initialStartMinute ?? 540,
+        ),
       ),
       end = TextEditingController(
-        text: WallTime.label(widget.block?.endMinute ?? 600),
+        text: WallTime.label(
+          widget.block?.endMinute ?? widget.initialEndMinute ?? 600,
+        ),
       );
   late int weekday = widget.block?.weekday ?? widget.weekday;
   late ScheduleColour colour = widget.block?.colour ?? ScheduleColour.blue;

@@ -32,7 +32,7 @@ GitHub Actions runs the Flutter unit and widget tests, Windows integration tests
 
 ## Get started
 
-The source is at version **1.9.1+15**. The project uses Flutter **3.47.5**.
+The source is at version **1.10.0+16**. The project uses Flutter **3.47.5**.
 
 **Try the Windows build.** Open a successful Windows workflow run and sign in to download the `TrackStudy-windows-x64` artifact if it is still available. Extract the entire portable ZIP and run `trackstudy.exe`. The Releases page is currently empty. [GitHub Actions](https://github.com/ricardo55ribeiro/TrackStudy/actions) · [Windows setup](docs/WINDOWS.md)
 

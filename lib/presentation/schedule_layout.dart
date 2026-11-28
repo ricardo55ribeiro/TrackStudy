@@ -16,6 +16,38 @@ const weekdays = [
 const scheduleMinuteHeight = 1.4;
 const scheduleBlockRadius = Radius.circular(7);
 
+typedef ScheduleRange = ({int start, int end});
+
+ScheduleRange snapScheduleRange(
+  double anchorY,
+  double pointerY, {
+  required int firstMinute,
+}) {
+  const slotMinutes = 30;
+  const dayEnd = 1440;
+  assert(
+    firstMinute >= 0 &&
+        firstMinute <= dayEnd - slotMinutes &&
+        firstMinute % slotMinutes == 0,
+  );
+
+  double slotAt(double y) {
+    final minute = firstMinute + y / scheduleMinuteHeight;
+    final slot = minute.clamp(firstMinute, dayEnd) / slotMinutes;
+    final boundary = slot.round();
+    // Correct rounding error from layout and pointer coordinates at boundaries
+    return (slot - boundary).abs() < 1e-9 ? boundary.toDouble() : slot;
+  }
+
+  final anchor = slotAt(anchorY), pointer = slotAt(pointerY);
+  final start = math.min(
+    math.min(anchor, pointer).floor(),
+    dayEnd ~/ slotMinutes - 1,
+  );
+  final end = math.max(math.max(anchor, pointer).ceil(), start + 1);
+  return (start: start * slotMinutes, end: end * slotMinutes);
+}
+
 Rect scheduleBlockBounds(
   SchedulePlacement placement, {
   required int firstMinute,
